@@ -1,0 +1,35 @@
+=====================================
+INCIDENT TYPE 6: ROGUE DEVICE DETECTION
+=====================================
+
+DESCRIPTION:
+An unauthorized device has connected to the network and is either consuming network resources, posing a security risk, or actively interfering with network services (e.g., running an unauthorized DHCP server).
+
+SYMPTOMS:
+- IPAM or DHCP logs show unknown MAC addresses receiving leases
+- Clients on a segment receive incorrect IP configuration (wrong gateway, DNS server) — suggests rogue DHCP server
+- Network monitoring detects new devices on segments where no new devices were expected
+- DNS queries from unknown source IPs appearing in DNS logs
+- Security tools alert on new or unrecognized MAC address
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Employee-connected unauthorized device — personal router, switch, or access point plugged into corporate network
+2. IoT device added without IT knowledge — smart device, printer, or sensor connected by end user
+3. Contractor or visitor device connected to internal network segment
+4. Misconfigured network equipment broadcasting DHCP on wrong interface
+5. Compromised device acting as rogue DHCP or DNS server as part of attack
+6. Test or lab equipment inadvertently connected to production network
+
+DIAGNOSTIC INDICATORS:
+- MAC address OUI lookup: What vendor does the MAC address belong to? Does it match expected device types?
+- Switch port location: Which physical port and which floor/room is the device connected to?
+- DHCP fingerprint: What DHCP options is the device requesting? Can device type be inferred?
+- DNS query pattern: What domains is the device querying? Does it look like a legitimate corporate device?
+- Lease history: Has this MAC appeared before? Is it new or returning after absence?
+
+RESOLUTION PATHS:
+- Immediate containment: Disable the switch port the device is connected to
+- Rogue DHCP: Identify and remove; restore correct DHCP service; check if clients received bad configuration and need to renew
+- NAC enforcement: If network access control is available, quarantine the device pending authorization
+- Investigation: Determine if device is malicious or simply unauthorized; escalate to security team if malicious
+- Process: Review physical security controls; implement 802.1X port authentication to prevent

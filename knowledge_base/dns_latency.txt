@@ -1,0 +1,36 @@
+=====================================
+INCIDENT TYPE 3: DNS RESOLUTION LATENCY
+=====================================
+
+DESCRIPTION:
+DNS queries are completing successfully but with abnormally high response times, causing application slowdowns, timeouts, and degraded user experience. Distinct from SERVFAIL — the query resolves, but too slowly.
+
+SYMPTOMS:
+- Application performance monitoring shows elevated DNS lookup times
+- Users report slow page loads or application timeouts on first connection
+- DNS monitoring shows average query response time above baseline (typically >50ms internally, >200ms for external resolution is a concern)
+- traceroute or dig commands show DNS as the bottleneck
+- Issue may be intermittent or consistent depending on cause
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Resolver cache miss rate too high — cache TTLs too low or cache size too small; resolver making excessive recursive lookups
+2. Slow or overloaded upstream forwarder — queries forwarded to an external or upstream resolver that is under load or geographically distant
+3. DNS server under resource pressure — insufficient CPU or memory causing query queuing
+4. Network latency to DNS server — clients configured to use a DNS server that is network-hops away rather than local
+5. DNSSEC validation overhead — validation chain lookups adding latency, especially for deeply nested delegations
+6. Authoritative server slow to respond — external authoritative server for queried domain is slow or partially reachable
+
+DIAGNOSTIC INDICATORS:
+- Cache hit rate: What proportion of queries are served from cache vs. requiring recursive resolution?
+- Query response time distribution: Is latency uniform or spiky? Spiky suggests upstream or network issue; uniform suggests local resource pressure
+- Which domains are slow: Internal zones, external domains, or specific TLDs?
+- Forwarder response time: How long is the resolver waiting on its upstream forwarder?
+- Client DNS configuration: Are clients using the nearest DNS server or a remote one?
+
+RESOLUTION PATHS:
+- Cache tuning: Increase cache size; review TTL settings on internal zones; consider negative cache TTL
+- Forwarder change: Switch to a faster upstream resolver; consider split DNS for internal vs external queries
+- Server resources: Scale up DNS server CPU/memory; add a second resolver for load distribution
+- Client reconfiguration: Point clients to a geographically closer DNS server
+- DNSSEC optimization: Review validation configuration; consider selective DNSSEC validation
+- RPZ or filtering overhead: If response policy zones are enabled, review rule complexity

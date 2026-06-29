@@ -1,0 +1,36 @@
+=====================================
+INCIDENT TYPE 5: CONFIGURATION DRIFT
+=====================================
+
+DESCRIPTION:
+DNS, DHCP, or IPAM configuration has diverged from the intended or documented baseline without a formal change record. Often discovered during audits, after unexplained incidents, or when troubleshooting reveals unexpected settings.
+
+SYMPTOMS:
+- DNS zone records do not match what documentation or IPAM shows
+- DHCP scope settings differ between primary and secondary servers
+- Forwarder lists contain unknown or unauthorized upstream resolvers
+- ACLs on DNS server allow queries from unexpected source ranges
+- SOA serial numbers inconsistent between primary and secondary nameservers
+- TTL values on critical records changed without explanation
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Manual changes made directly on DNS/DHCP server bypassing change management process
+2. Automated system (monitoring tool, provisioning script) modifying records without logging
+3. Failed rollback — a change was partially reverted, leaving configuration in inconsistent state
+4. Multi-site replication failure — configuration change applied to one site but replication to others failed silently
+5. Software upgrade side effect — version upgrade reset or modified default configuration values
+6. Unauthorized access — configuration changed by someone without proper authorization
+
+DIAGNOSTIC INDICATORS:
+- Change log comparison: Do recent configuration changes in the CMDB/change log account for all observed differences?
+- Diff against baseline: Compare current configuration against last known good backup
+- Replication status: Are all DNS/DHCP nodes in the cluster showing consistent configuration?
+- Access logs: Who accessed the DNS/DHCP management interface in the relevant time window?
+- Automated job logs: Did any provisioning or orchestration jobs run against these systems recently?
+
+RESOLUTION PATHS:
+- Immediate: Document the drift; assess whether current or baseline configuration is correct
+- Rollback: If drift is clearly wrong, restore from last known good configuration backup
+- Process fix: Enforce change management controls; disable direct server access where possible
+- Replication repair: Force resynchronization across all nodes; verify replication health monitoring
+- Audit: Conduct access log review; identify source of unauthorized changes

@@ -1,0 +1,382 @@
+DDI INCIDENT INVESTIGATION REFERENCE
+=====================================
+Source: Public DDI operational knowledge, DNS/DHCP/IPAM best practices
+Scope: Incident types, symptoms, root causes, diagnostic indicators
+Purpose: Knowledge base for AI-assisted DDI incident investigation
+
+=====================================
+INCIDENT TYPE 1: SERVFAIL RATE SPIKE
+=====================================
+
+DESCRIPTION:
+A sudden or sustained increase in DNS SERVFAIL responses returned to clients. SERVFAIL (DNS response code 2) indicates the nameserver failed to complete the query, as distinct from NXDOMAIN (name does not exist) or REFUSED.
+
+SYMPTOMS:
+- DNS monitoring dashboards show elevated SERVFAIL response rate
+- Applications report intermittent or complete DNS resolution failures
+- End users experience connectivity issues to internal or external services
+- DNS query logs show high proportion of RCODE=2 responses
+- Help desk receives spike in "cannot reach [service]" tickets
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Upstream forwarder or resolver unreachable — most common cause; the recursive resolver cannot reach its configured upstream DNS servers
+2. DNSSEC validation failure — signed zone has expired or invalid signatures, causing validating resolvers to return SERVFAIL instead of the record
+3. Zone transfer failure — secondary nameserver has stale or missing zone data because zone transfer from primary failed
+4. Authoritative server misconfiguration — zone file syntax error, missing SOA record, or incorrect delegation
+5. Resource exhaustion on DNS server — CPU, memory, or file descriptor limits reached; server drops or fails queries
+6. Network-level filtering — firewall rule change blocking DNS traffic on port 53 (UDP/TCP)
+
+DIAGNOSTIC INDICATORS:
+- Scope: Is SERVFAIL affecting all queries or specific zones/domains only? Zone-specific points to authoritative issue; global points to forwarder or network
+- Timing: Did the spike correlate with a configuration change, maintenance window, or certificate/signature expiry?
+- DNSSEC: Is DNSSEC enabled? Check signature expiry dates on affected zones
+- Forwarder reachability: Can the resolver reach its configured upstream IPs on port 53?
+- Zone transfer logs: Any failed AXFR/IXFR transfers in the hours before the spike?
+- Server resources: CPU, memory, and connection counts on the DNS server at time of spike
+
+RESOLUTION PATHS:
+- Forwarder unreachable: Restore network path or switch to alternate forwarder; check firewall rules
+- DNSSEC failure: Re-sign zone or extend signature validity; check DNSKEY and RRSIG records
+- Zone transfer failure: Investigate network between primary and secondary; check TSIG keys if used; force manual zone transfer
+- Misconfiguration: Review zone file syntax; validate with named-checkzone or equivalent tool
+- Resource exhaustion: Increase server resources or tune resolver cache and rate limits
+- Firewall block: Review recent ACL changes; restore port 53 access from resolver to upstream
+
+=====================================
+INCIDENT TYPE 2: DHCP SCOPE EXHAUSTION
+=====================================
+
+DESCRIPTION:
+A DHCP scope (pool of IP addresses assigned to a subnet) has no remaining addresses available to lease to new clients. New devices connecting to the network receive no IP address and cannot communicate.
+
+SYMPTOMS:
+- New devices on affected subnet fail to obtain IP address (APIPA addresses 169.254.x.x on Windows clients)
+- DHCP server logs show "no free leases" or equivalent error for the scope
+- DHCP monitoring shows scope utilization at or near 100%
+- Help desk receives "cannot connect to network" reports localized to specific office, floor, or VLAN
+- Wireless clients fail to associate or immediately drop connectivity
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Scope undersized for current device count — scope was sized for a previous population; device growth or BYOD/IoT expansion exceeded original capacity
+2. Lease time too long — leases not expiring fast enough to recycle addresses; common in environments with high device turnover (conference rooms, guest networks)
+3. Stale leases — devices that no longer exist on the network still hold active leases; common after device refresh or office relocation
+4. Rogue DHCP client or misconfigured device exhausting scope — a single device requesting excessive leases or a loop condition
+5. Scope not split correctly across redundant DHCP servers — failover misconfiguration leaving portion of scope unavailable
+6. Subnet too small for actual network design — /24 or smaller scope assigned to a segment with more than 250 devices
+
+DIAGNOSTIC INDICATORS:
+- Current utilization: What percentage of addresses are leased vs. available?
+- Lease age distribution: Are most leases fresh or are many stale/expired?
+- Client MAC diversity: Are leases held by a large number of unique MACs or concentrated on a few?
+- Lease time setting: What is the configured lease duration? Is it appropriate for this segment type?
+- Scope boundaries: Is the scope size appropriate for the number of devices expected on this segment?
+- Failover state: If DHCP failover is configured, what is the split ratio and state of the partner server?
+
+RESOLUTION PATHS:
+- Immediate relief: Reduce lease time to accelerate address recycling; manually clear confirmed stale leases
+- Scope expansion: Extend scope range if IP space is available in the subnet
+- Subnet resize: If no room to expand, resize the subnet (requires coordination with routing/firewall teams)
+- Rogue device: Identify offending MAC from lease logs; isolate device from network
+- Failover fix: Reconfigure failover split or resynchronize partner server state
+- Long-term: Implement IPAM-driven capacity alerting to catch exhaustion before it occurs
+
+=====================================
+INCIDENT TYPE 3: DNS RESOLUTION LATENCY
+=====================================
+
+DESCRIPTION:
+DNS queries are completing successfully but with abnormally high response times, causing application slowdowns, timeouts, and degraded user experience. Distinct from SERVFAIL — the query resolves, but too slowly.
+
+SYMPTOMS:
+- Application performance monitoring shows elevated DNS lookup times
+- Users report slow page loads or application timeouts on first connection
+- DNS monitoring shows average query response time above baseline (typically >50ms internally, >200ms for external resolution is a concern)
+- traceroute or dig commands show DNS as the bottleneck
+- Issue may be intermittent or consistent depending on cause
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Resolver cache miss rate too high — cache TTLs too low or cache size too small; resolver making excessive recursive lookups
+2. Slow or overloaded upstream forwarder — queries forwarded to an external or upstream resolver that is under load or geographically distant
+3. DNS server under resource pressure — insufficient CPU or memory causing query queuing
+4. Network latency to DNS server — clients configured to use a DNS server that is network-hops away rather than local
+5. DNSSEC validation overhead — validation chain lookups adding latency, especially for deeply nested delegations
+6. Authoritative server slow to respond — external authoritative server for queried domain is slow or partially reachable
+
+DIAGNOSTIC INDICATORS:
+- Cache hit rate: What proportion of queries are served from cache vs. requiring recursive resolution?
+- Query response time distribution: Is latency uniform or spiky? Spiky suggests upstream or network issue; uniform suggests local resource pressure
+- Which domains are slow: Internal zones, external domains, or specific TLDs?
+- Forwarder response time: How long is the resolver waiting on its upstream forwarder?
+- Client DNS configuration: Are clients using the nearest DNS server or a remote one?
+
+RESOLUTION PATHS:
+- Cache tuning: Increase cache size; review TTL settings on internal zones; consider negative cache TTL
+- Forwarder change: Switch to a faster upstream resolver; consider split DNS for internal vs external queries
+- Server resources: Scale up DNS server CPU/memory; add a second resolver for load distribution
+- Client reconfiguration: Point clients to a geographically closer DNS server
+- DNSSEC optimization: Review validation configuration; consider selective DNSSEC validation
+- RPZ or filtering overhead: If response policy zones are enabled, review rule complexity
+
+=====================================
+INCIDENT TYPE 4: IP ADDRESS CONFLICT
+=====================================
+
+DESCRIPTION:
+Two devices on the same subnet have been assigned or have claimed the same IP address, causing connectivity disruption for one or both devices. ARP conflict detection typically surfaces this.
+
+SYMPTOMS:
+- Windows clients show "IP address conflict" notification
+- One or both conflicting devices loses network connectivity intermittently
+- ARP tables on switches show MAC address flapping for a given IP
+- IPAM shows an address as assigned but the device using it does not match the record
+- Applications on affected devices become unreachable
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Statically assigned IP falls within DHCP scope range — a device configured with a static IP that the DHCP server also hands out to other clients
+2. IPAM record out of sync with actual network state — IP marked as available in IPAM but actually in use
+3. Duplicate static assignment — two devices manually configured with the same IP due to poor change management
+4. DHCP server issued same address twice — rare but possible during failover state inconsistency
+5. Virtual machine or container reuse of an old IP — cloned VM retains IP of original; both run simultaneously
+6. Rogue device — unauthorized device configured with an IP that belongs to another system
+
+DIAGNOSTIC INDICATORS:
+- ARP table on default gateway: Which MACs are claiming the conflicting IP?
+- DHCP lease records: Is the IP within a DHCP scope? Is there an active lease for it?
+- IPAM records: What does IPAM show for that IP — assigned, reserved, or available?
+- Switch port: Which physical or virtual switch ports are the conflicting MACs connected to?
+- DHCP exclusion ranges: Are static IP assignments properly excluded from DHCP scope?
+
+RESOLUTION PATHS:
+- Static/DHCP conflict: Add the static IP to the DHCP exclusion range immediately; reconfigure the static device to use an IP outside the DHCP scope
+- Duplicate static: Identify both devices; reassign one to a different IP; update IPAM and DNS records
+- IPAM sync: Run IPAM discovery scan to reconcile records with actual network state
+- VM conflict: Identify cloned VM; assign new IP; update DNS and IPAM
+- Rogue device: Identify from switch port and MAC; isolate or remove from network
+
+=====================================
+INCIDENT TYPE 5: CONFIGURATION DRIFT
+=====================================
+
+DESCRIPTION:
+DNS, DHCP, or IPAM configuration has diverged from the intended or documented baseline without a formal change record. Often discovered during audits, after unexplained incidents, or when troubleshooting reveals unexpected settings.
+
+SYMPTOMS:
+- DNS zone records do not match what documentation or IPAM shows
+- DHCP scope settings differ between primary and secondary servers
+- Forwarder lists contain unknown or unauthorized upstream resolvers
+- ACLs on DNS server allow queries from unexpected source ranges
+- SOA serial numbers inconsistent between primary and secondary nameservers
+- TTL values on critical records changed without explanation
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Manual changes made directly on DNS/DHCP server bypassing change management process
+2. Automated system (monitoring tool, provisioning script) modifying records without logging
+3. Failed rollback — a change was partially reverted, leaving configuration in inconsistent state
+4. Multi-site replication failure — configuration change applied to one site but replication to others failed silently
+5. Software upgrade side effect — version upgrade reset or modified default configuration values
+6. Unauthorized access — configuration changed by someone without proper authorization
+
+DIAGNOSTIC INDICATORS:
+- Change log comparison: Do recent configuration changes in the CMDB/change log account for all observed differences?
+- Diff against baseline: Compare current configuration against last known good backup
+- Replication status: Are all DNS/DHCP nodes in the cluster showing consistent configuration?
+- Access logs: Who accessed the DNS/DHCP management interface in the relevant time window?
+- Automated job logs: Did any provisioning or orchestration jobs run against these systems recently?
+
+RESOLUTION PATHS:
+- Immediate: Document the drift; assess whether current or baseline configuration is correct
+- Rollback: If drift is clearly wrong, restore from last known good configuration backup
+- Process fix: Enforce change management controls; disable direct server access where possible
+- Replication repair: Force resynchronization across all nodes; verify replication health monitoring
+- Audit: Conduct access log review; identify source of unauthorized changes
+
+=====================================
+INCIDENT TYPE 6: ROGUE DEVICE DETECTION
+=====================================
+
+DESCRIPTION:
+An unauthorized device has connected to the network and is either consuming network resources, posing a security risk, or actively interfering with network services (e.g., running an unauthorized DHCP server).
+
+SYMPTOMS:
+- IPAM or DHCP logs show unknown MAC addresses receiving leases
+- Clients on a segment receive incorrect IP configuration (wrong gateway, DNS server) — suggests rogue DHCP server
+- Network monitoring detects new devices on segments where no new devices were expected
+- DNS queries from unknown source IPs appearing in DNS logs
+- Security tools alert on new or unrecognized MAC address
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Employee-connected unauthorized device — personal router, switch, or access point plugged into corporate network
+2. IoT device added without IT knowledge — smart device, printer, or sensor connected by end user
+3. Contractor or visitor device connected to internal network segment
+4. Misconfigured network equipment broadcasting DHCP on wrong interface
+5. Compromised device acting as rogue DHCP or DNS server as part of attack
+6. Test or lab equipment inadvertently connected to production network
+
+DIAGNOSTIC INDICATORS:
+- MAC address OUI lookup: What vendor does the MAC address belong to? Does it match expected device types?
+- Switch port location: Which physical port and which floor/room is the device connected to?
+- DHCP fingerprint: What DHCP options is the device requesting? Can device type be inferred?
+- DNS query pattern: What domains is the device querying? Does it look like a legitimate corporate device?
+- Lease history: Has this MAC appeared before? Is it new or returning after absence?
+
+RESOLUTION PATHS:
+- Immediate containment: Disable the switch port the device is connected to
+- Rogue DHCP: Identify and remove; restore correct DHCP service; check if clients received bad configuration and need to renew
+- NAC enforcement: If network access control is available, quarantine the device pending authorization
+- Investigation: Determine if device is malicious or simply unauthorized; escalate to security team if malicious
+- Process: Review physical security controls; implement 802.1X port authentication to prevent recurrence
+
+=====================================
+INCIDENT TYPE 7: SUBNET MISCONFIGURATION
+=====================================
+
+DESCRIPTION:
+A subnet has been configured with incorrect parameters — wrong mask, gateway, VLAN assignment, or IPAM record — causing routing failures, address waste, or connectivity issues for devices on that segment.
+
+SYMPTOMS:
+- Devices on the subnet can communicate locally but cannot reach other subnets or the internet
+- Default gateway is unreachable or incorrect
+- IPAM shows subnet with parameters that do not match router or switch configuration
+- Devices receive correct IP but incorrect subnet mask, causing them to misclassify remote hosts as local
+- New subnet deployment fails to route traffic correctly
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. IPAM record not synchronized with router/switch configuration — IPAM shows one mask or gateway, device is configured differently
+2. VLAN mismatch — subnet assigned to wrong VLAN ID; traffic not reaching correct segment
+3. Subnet mask error — /24 entered where /23 was intended (or vice versa), causing incorrect broadcast domain
+4. Gateway IP not configured or down — router interface for the subnet is missing, wrong IP, or administratively down
+5. Overlapping subnet — new subnet overlaps with existing allocation; routing table conflict
+6. DNS not updated — new subnet's reverse DNS zone not created; PTR records failing
+
+DIAGNOSTIC INDICATORS:
+- Reachability test: Can devices reach their configured default gateway? Can they reach devices on other subnets?
+- IPAM vs. router comparison: Does the subnet mask and gateway in IPAM match the router interface configuration?
+- VLAN verification: Is the correct VLAN tagged on the switch ports for this subnet?
+- Route table: Does the router have a route for this subnet on the correct interface?
+- Overlap check: Does the new subnet overlap with any existing allocation in IPAM?
+
+RESOLUTION PATHS:
+- IPAM sync: Update IPAM to reflect actual network configuration or vice versa — determine which is the source of truth
+- VLAN fix: Correct VLAN assignment on switch; verify trunk configuration between switches and router
+- Gateway fix: Configure correct IP on router interface; verify interface is up
+- Overlap resolution: Renumber one of the overlapping subnets; requires coordination with affected device owners
+- DNS update: Create reverse zone for new subnet; generate PTR records
+
+=====================================
+INCIDENT TYPE 8: DNS FORWARDING FAILURE
+=====================================
+
+DESCRIPTION:
+The DNS resolver is failing to forward queries to its configured upstream forwarder(s), causing resolution failures for domains that are not locally authoritative. Typically affects external domain resolution while internal zones remain functional.
+
+SYMPTOMS:
+- Internal DNS names resolve correctly; external names (internet domains) fail
+- DNS server logs show forwarding timeout or connection refused to upstream IPs
+- dig or nslookup to external domains returns SERVFAIL from internal resolver
+- Applications that depend on external DNS (SaaS, cloud services, updates) fail
+- The failure is consistent rather than intermittent (unlike latency issues)
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Firewall rule change blocking outbound port 53 from DNS server — most common cause after network changes
+2. Upstream forwarder IP changed or decommissioned — forwarder list contains stale IPs
+3. Network route to forwarder removed — routing change makes upstream unreachable
+4. Upstream forwarder overloaded or down — ISP DNS or corporate upstream resolver is unavailable
+5. DNS server forwarder configuration cleared or corrupted — forwarding disabled accidentally
+6. ISP or upstream DNS service outage — external dependency failure
+
+DIAGNOSTIC INDICATORS:
+- Direct test: Can the DNS server itself reach its configured forwarder IPs on port 53? (Use dig @<forwarder_ip> from the DNS server)
+- Firewall logs: Any recent rules added blocking outbound DNS from the server's IP?
+- Forwarder list: Are the configured forwarder IPs still valid and operational?
+- Network path: Is there a route from the DNS server to the forwarder IP?
+- Scope of failure: Are all external domains failing or only specific ones? All-external suggests forwarder issue; specific domains suggest authoritative issue
+
+RESOLUTION PATHS:
+- Firewall block: Restore outbound port 53 access from DNS server IP to configured forwarder IPs
+- Stale forwarder: Update forwarder list with correct upstream IPs
+- Route issue: Restore network route or add static route to forwarder
+- Upstream down: Switch to alternate forwarder (e.g., secondary ISP DNS or public resolver as temporary fallback)
+- Configuration corruption: Restore forwarder configuration from backup or reconfigure manually
+
+=====================================
+INCIDENT TYPE 9: DDNS UPDATE FAILURE
+=====================================
+
+DESCRIPTION:
+Dynamic DNS (DDNS) updates from DHCP server to DNS server are failing, causing DNS records to become stale or missing for dynamically addressed clients. Devices receive IP addresses from DHCP but DNS does not reflect their current addresses.
+
+SYMPTOMS:
+- DNS lookup for a dynamically addressed hostname fails or returns an old IP
+- DHCP server logs show DDNS update errors or timeouts
+- DNS zone shows records with old IPs for devices that have renewed leases
+- Applications that rely on hostname resolution for internal clients fail intermittently
+- Reverse DNS (PTR) records missing or incorrect for DHCP clients
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. TSIG key mismatch — the shared secret used to authenticate DDNS updates between DHCP and DNS servers has become inconsistent
+2. DNS server not accepting dynamic updates — zone configuration changed to static; dynamic updates disabled
+3. Network connectivity issue between DHCP and DNS server — update packets being dropped
+4. DNS server ACL blocking DDNS updates — access control list not permitting updates from DHCP server IP
+5. Zone not configured for dynamic updates on DNS side — allow-update directive missing or incorrect
+6. Clock skew between DHCP and DNS servers — TSIG authentication fails if server clocks differ by more than 5 minutes
+
+DIAGNOSTIC INDICATORS:
+- DHCP logs: What specific error is the DHCP server reporting when DDNS updates fail? (REFUSED, NOTAUTH, SERVFAIL, timeout?)
+- DNS zone configuration: Is the zone configured to allow dynamic updates? From which source IPs?
+- TSIG key: Are the TSIG key name and secret identical on both DHCP and DNS servers?
+- Clock sync: Are both servers synchronized to NTP? What is the time difference between them?
+- Manual test: Can a manual nsupdate command succeed from the DHCP server to the DNS server?
+
+RESOLUTION PATHS:
+- TSIG mismatch: Regenerate TSIG key; update configuration on both DHCP and DNS servers simultaneously
+- Zone configuration: Re-enable dynamic updates on DNS zone; add correct allow-update ACL
+- ACL fix: Add DHCP server IP to DNS server's allow-update or allow-query-on ACL
+- Clock fix: Synchronize both servers to the same NTP source; verify time difference is under 1 minute
+- Network fix: Verify connectivity from DHCP to DNS on port 53 TCP and UDP; check firewall rules
+
+=====================================
+INCIDENT TYPE 10: DNS HIJACKING INDICATORS
+=====================================
+
+DESCRIPTION:
+DNS responses are being tampered with — either by a malicious actor or a misconfigured device — causing clients to receive incorrect IP addresses for legitimate domain names. A security incident category requiring escalation.
+
+SYMPTOMS:
+- Users report being redirected to unexpected or suspicious websites when accessing known-good URLs
+- DNS responses for known domains return IPs that do not belong to the legitimate service
+- SSL/TLS certificate warnings when accessing services that normally have valid certificates
+- DNS monitoring detects responses from unexpected source IPs for authoritative queries
+- Specific domains resolve to different IPs from different network locations
+- DNSSEC validation failures on previously valid signed zones
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Rogue DNS server on network — a device responding to DNS queries before the legitimate server (ARP spoofing or DHCP-based attack)
+2. DNS cache poisoning — attacker has injected fraudulent records into resolver cache (Kaminsky-style attack)
+3. Authoritative DNS server compromise — legitimate DNS server has had its zone records modified by an attacker
+4. BGP hijacking affecting DNS infrastructure — upstream routing manipulation redirecting DNS traffic
+5. Malware on client or DNS server — malicious software modifying DNS responses or hosts file
+6. Misconfigured split-DNS — internal resolver returning wrong records due to configuration error (not malicious but same symptoms)
+
+DIAGNOSTIC INDICATORS:
+- Response comparison: Do DNS responses from internal resolver match responses from external trusted resolvers (e.g., querying authoritative servers directly)?
+- Response source: Are DNS responses coming from the expected server IP?
+- Cache inspection: Does the resolver cache contain records with unexpected TTLs or IP addresses?
+- DNSSEC: If DNSSEC is enabled, are signatures valid? Hijacked responses typically fail DNSSEC validation
+- Affected scope: Is hijacking affecting all clients or specific segments? Segment-specific suggests rogue device on that segment
+- Registrar check: Do the nameservers listed at the domain registrar match what the DNS is returning?
+
+RESOLUTION PATHS:
+- Immediate: Escalate to security team; this is a security incident, not a routine operational issue
+- Rogue server: Identify and isolate; flush resolver cache; verify clients return to correct DNS server
+- Cache poisoning: Flush resolver cache; implement DNS response rate limiting; enable DNSSEC validation
+- Authoritative compromise: Take affected zones offline; restore from backup; rotate credentials; conduct forensic review
+- Client malware: Isolate affected clients; run malware remediation; check hosts file for tampering
+- Process: DNS hijacking should trigger your security incident response procedure, not just a DDI ticket
+
+=====================================
+END OF DOCUMENT
+=====================================
+Version: 1.0
+Purpose: DDI Incident Investigation Copilot — Knowledge Base
+Competition: EfficientIP AI Summer Game 2026
+Data classification: Public knowledge only — no proprietary or customer data

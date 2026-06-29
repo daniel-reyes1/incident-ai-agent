@@ -1,0 +1,38 @@
+=====================================
+INCIDENT TYPE 10: DNS HIJACKING INDICATORS
+=====================================
+
+DESCRIPTION:
+DNS responses are being tampered with — either by a malicious actor or a misconfigured device — causing clients to receive incorrect IP addresses for legitimate domain names. A security incident category requiring escalation.
+
+SYMPTOMS:
+- Users report being redirected to unexpected or suspicious websites when accessing known-good URLs
+- DNS responses for known domains return IPs that do not belong to the legitimate service
+- SSL/TLS certificate warnings when accessing services that normally have valid certificates
+- DNS monitoring detects responses from unexpected source IPs for authoritative queries
+- Specific domains resolve to different IPs from different network locations
+- DNSSEC validation failures on previously valid signed zones
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Rogue DNS server on network — a device responding to DNS queries before the legitimate server (ARP spoofing or DHCP-based attack)
+2. DNS cache poisoning — attacker has injected fraudulent records into resolver cache (Kaminsky-style attack)
+3. Authoritative DNS server compromise — legitimate DNS server has had its zone records modified by an attacker
+4. BGP hijacking affecting DNS infrastructure — upstream routing manipulation redirecting DNS traffic
+5. Malware on client or DNS server — malicious software modifying DNS responses or hosts file
+6. Misconfigured split-DNS — internal resolver returning wrong records due to configuration error (not malicious but same symptoms)
+
+DIAGNOSTIC INDICATORS:
+- Response comparison: Do DNS responses from internal resolver match responses from external trusted resolvers (e.g., querying authoritative servers directly)?
+- Response source: Are DNS responses coming from the expected server IP?
+- Cache inspection: Does the resolver cache contain records with unexpected TTLs or IP addresses?
+- DNSSEC: If DNSSEC is enabled, are signatures valid? Hijacked responses typically fail DNSSEC validation
+- Affected scope: Is hijacking affecting all clients or specific segments? Segment-specific suggests rogue device on that segment
+- Registrar check: Do the nameservers listed at the domain registrar match what the DNS is returning?
+
+RESOLUTION PATHS:
+- Immediate: Escalate to security team; this is a security incident, not a routine operational issue
+- Rogue server: Identify and isolate; flush resolver cache; verify clients return to correct DNS server
+- Cache poisoning: Flush resolver cache; implement DNS response rate limiting; enable DNSSEC validation
+- Authoritative compromise: Take affected zones offline; restore from backup; rotate credentials; conduct forensic review
+- Client malware: Isolate affected clients; run malware remediation; check hosts file for tampering
+- Process: DNS hijacking should trigger your security incident response procedure, not just a DDI ticket

@@ -1,0 +1,35 @@
+=====================================
+INCIDENT TYPE 8: DNS FORWARDING FAILURE
+=====================================
+
+DESCRIPTION:
+The DNS resolver is failing to forward queries to its configured upstream forwarder(s), causing resolution failures for domains that are not locally authoritative. Typically affects external domain resolution while internal zones remain functional.
+
+SYMPTOMS:
+- Internal DNS names resolve correctly; external names (internet domains) fail
+- DNS server logs show forwarding timeout or connection refused to upstream IPs
+- dig or nslookup to external domains returns SERVFAIL from internal resolver
+- Applications that depend on external DNS (SaaS, cloud services, updates) fail
+- The failure is consistent rather than intermittent (unlike latency issues)
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Firewall rule change blocking outbound port 53 from DNS server — most common cause after network changes
+2. Upstream forwarder IP changed or decommissioned — forwarder list contains stale IPs
+3. Network route to forwarder removed — routing change makes upstream unreachable
+4. Upstream forwarder overloaded or down — ISP DNS or corporate upstream resolver is unavailable
+5. DNS server forwarder configuration cleared or corrupted — forwarding disabled accidentally
+6. ISP or upstream DNS service outage — external dependency failure
+
+DIAGNOSTIC INDICATORS:
+- Direct test: Can the DNS server itself reach its configured forwarder IPs on port 53? (Use dig @<forwarder_ip> from the DNS server)
+- Firewall logs: Any recent rules added blocking outbound DNS from the server's IP?
+- Forwarder list: Are the configured forwarder IPs still valid and operational?
+- Network path: Is there a route from the DNS server to the forwarder IP?
+- Scope of failure: Are all external domains failing or only specific ones? All-external suggests forwarder issue; specific domains suggest authoritative issue
+
+RESOLUTION PATHS:
+- Firewall block: Restore outbound port 53 access from DNS server IP to configured forwarder IPs
+- Stale forwarder: Update forwarder list with correct upstream IPs
+- Route issue: Restore network route or add static route to forwarder
+- Upstream down: Switch to alternate forwarder (e.g., secondary ISP DNS or public resolver as temporary fallback)
+- Configuration corruption: Restore forwarder configuration from backup or reconfigure manually

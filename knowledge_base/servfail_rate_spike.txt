@@ -1,0 +1,43 @@
+DDI INCIDENT INVESTIGATION REFERENCE
+=====================================
+Source: Public DDI operational knowledge, DNS/DHCP/IPAM best practices
+Scope: Incident types, symptoms, root causes, diagnostic indicators
+Purpose: Knowledge base for AI-assisted DDI incident investigation
+
+=====================================
+INCIDENT TYPE 1: SERVFAIL RATE SPIKE
+=====================================
+
+DESCRIPTION:
+A sudden or sustained increase in DNS SERVFAIL responses returned to clients. SERVFAIL (DNS response code 2) indicates the nameserver failed to complete the query, as distinct from NXDOMAIN (name does not exist) or REFUSED.
+
+SYMPTOMS:
+- DNS monitoring dashboards show elevated SERVFAIL response rate
+- Applications report intermittent or complete DNS resolution failures
+- End users experience connectivity issues to internal or external services
+- DNS query logs show high proportion of RCODE=2 responses
+- Help desk receives spike in "cannot reach [service]" tickets
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Upstream forwarder or resolver unreachable — most common cause; the recursive resolver cannot reach its configured upstream DNS servers
+2. DNSSEC validation failure — signed zone has expired or invalid signatures, causing validating resolvers to return SERVFAIL instead of the record
+3. Zone transfer failure — secondary nameserver has stale or missing zone data because zone transfer from primary failed
+4. Authoritative server misconfiguration — zone file syntax error, missing SOA record, or incorrect delegation
+5. Resource exhaustion on DNS server — CPU, memory, or file descriptor limits reached; server drops or fails queries
+6. Network-level filtering — firewall rule change blocking DNS traffic on port 53 (UDP/TCP)
+
+DIAGNOSTIC INDICATORS:
+- Scope: Is SERVFAIL affecting all queries or specific zones/domains only? Zone-specific points to authoritative issue; global points to forwarder or network
+- Timing: Did the spike correlate with a configuration change, maintenance window, or certificate/signature expiry?
+- DNSSEC: Is DNSSEC enabled? Check signature expiry dates on affected zones
+- Forwarder reachability: Can the resolver reach its configured upstream IPs on port 53?
+- Zone transfer logs: Any failed AXFR/IXFR transfers in the hours before the spike?
+- Server resources: CPU, memory, and connection counts on the DNS server at time of spike
+
+RESOLUTION PATHS:
+- Forwarder unreachable: Restore network path or switch to alternate forwarder; check firewall rules
+- DNSSEC failure: Re-sign zone or extend signature validity; check DNSKEY and RRSIG records
+- Zone transfer failure: Investigate network between primary and secondary; check TSIG keys if used; force manual zone transfer
+- Misconfiguration: Review zone file syntax; validate with named-checkzone or equivalent tool
+- Resource exhaustion: Increase server resources or tune resolver cache and rate limits
+- Firewall block: Review recent ACL changes; restore port 53 access from resolver to upstream

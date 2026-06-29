@@ -1,0 +1,37 @@
+=====================================
+INCIDENT TYPE 2: DHCP SCOPE EXHAUSTION
+=====================================
+
+DESCRIPTION:
+A DHCP scope (pool of IP addresses assigned to a subnet) has no remaining addresses available to lease to new clients. New devices connecting to the network receive no IP address and cannot communicate.
+
+SYMPTOMS:
+- New devices on affected subnet fail to obtain IP address (APIPA addresses 169.254.x.x on Windows clients)
+- DHCP server logs show "no free leases" or equivalent error for the scope
+- DHCP monitoring shows scope utilization at or near 100%
+- Help desk receives "cannot connect to network" reports localized to specific office, floor, or VLAN
+- Wireless clients fail to associate or immediately drop connectivity
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Scope undersized for current device count — scope was sized for a previous population; device growth or BYOD/IoT expansion exceeded original capacity
+2. Lease time too long — leases not expiring fast enough to recycle addresses; common in environments with high device turnover (conference rooms, guest networks)
+3. Stale leases — devices that no longer exist on the network still hold active leases; common after device refresh or office relocation
+4. Rogue DHCP client or misconfigured device exhausting scope — a single device requesting excessive leases or a loop condition
+5. Scope not split correctly across redundant DHCP servers — failover misconfiguration leaving portion of scope unavailable
+6. Subnet too small for actual network design — /24 or smaller scope assigned to a segment with more than 250 devices
+
+DIAGNOSTIC INDICATORS:
+- Current utilization: What percentage of addresses are leased vs. available?
+- Lease age distribution: Are most leases fresh or are many stale/expired?
+- Client MAC diversity: Are leases held by a large number of unique MACs or concentrated on a few?
+- Lease time setting: What is the configured lease duration? Is it appropriate for this segment type?
+- Scope boundaries: Is the scope size appropriate for the number of devices expected on this segment?
+- Failover state: If DHCP failover is configured, what is the split ratio and state of the partner server?
+
+RESOLUTION PATHS:
+- Immediate relief: Reduce lease time to accelerate address recycling; manually clear confirmed stale leases
+- Scope expansion: Extend scope range if IP space is available in the subnet
+- Subnet resize: If no room to expand, resize the subnet (requires coordination with routing/firewall teams)
+- Rogue device: Identify offending MAC from lease logs; isolate device from network
+- Failover fix: Reconfigure failover split or resynchronize partner server state
+- Long-term: Implement IPAM-driven capacity alerting to catch exhaustion before it occurs

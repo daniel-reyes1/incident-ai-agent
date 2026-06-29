@@ -1,0 +1,35 @@
+=====================================
+INCIDENT TYPE 4: IP ADDRESS CONFLICT
+=====================================
+
+DESCRIPTION:
+Two devices on the same subnet have been assigned or have claimed the same IP address, causing connectivity disruption for one or both devices. ARP conflict detection typically surfaces this.
+
+SYMPTOMS:
+- Windows clients show "IP address conflict" notification
+- One or both conflicting devices loses network connectivity intermittently
+- ARP tables on switches show MAC address flapping for a given IP
+- IPAM shows an address as assigned but the device using it does not match the record
+- Applications on affected devices become unreachable
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. Statically assigned IP falls within DHCP scope range — a device configured with a static IP that the DHCP server also hands out to other clients
+2. IPAM record out of sync with actual network state — IP marked as available in IPAM but actually in use
+3. Duplicate static assignment — two devices manually configured with the same IP due to poor change management
+4. DHCP server issued same address twice — rare but possible during failover state inconsistency
+5. Virtual machine or container reuse of an old IP — cloned VM retains IP of original; both run simultaneously
+6. Rogue device — unauthorized device configured with an IP that belongs to another system
+
+DIAGNOSTIC INDICATORS:
+- ARP table on default gateway: Which MACs are claiming the conflicting IP?
+- DHCP lease records: Is the IP within a DHCP scope? Is there an active lease for it?
+- IPAM records: What does IPAM show for that IP — assigned, reserved, or available?
+- Switch port: Which physical or virtual switch ports are the conflicting MACs connected to?
+- DHCP exclusion ranges: Are static IP assignments properly excluded from DHCP scope?
+
+RESOLUTION PATHS:
+- Static/DHCP conflict: Add the static IP to the DHCP exclusion range immediately; reconfigure the static device to use an IP outside the DHCP scope
+- Duplicate static: Identify both devices; reassign one to a different IP; update IPAM and DNS records
+- IPAM sync: Run IPAM discovery scan to reconcile records with actual network state
+- VM conflict: Identify cloned VM; assign new IP; update DNS and IPAM
+- Rogue device: Identify from switch port and MAC; isolate or remove from network

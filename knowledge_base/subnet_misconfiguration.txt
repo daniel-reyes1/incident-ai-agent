@@ -1,0 +1,35 @@
+=====================================
+INCIDENT TYPE 7: SUBNET MISCONFIGURATION
+=====================================
+
+DESCRIPTION:
+A subnet has been configured with incorrect parameters — wrong mask, gateway, VLAN assignment, or IPAM record — causing routing failures, address waste, or connectivity issues for devices on that segment.
+
+SYMPTOMS:
+- Devices on the subnet can communicate locally but cannot reach other subnets or the internet
+- Default gateway is unreachable or incorrect
+- IPAM shows subnet with parameters that do not match router or switch configuration
+- Devices receive correct IP but incorrect subnet mask, causing them to misclassify remote hosts as local
+- New subnet deployment fails to route traffic correctly
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. IPAM record not synchronized with router/switch configuration — IPAM shows one mask or gateway, device is configured differently
+2. VLAN mismatch — subnet assigned to wrong VLAN ID; traffic not reaching correct segment
+3. Subnet mask error — /24 entered where /23 was intended (or vice versa), causing incorrect broadcast domain
+4. Gateway IP not configured or down — router interface for the subnet is missing, wrong IP, or administratively down
+5. Overlapping subnet — new subnet overlaps with existing allocation; routing table conflict
+6. DNS not updated — new subnet's reverse DNS zone not created; PTR records failing
+
+DIAGNOSTIC INDICATORS:
+- Reachability test: Can devices reach their configured default gateway? Can they reach devices on other subnets?
+- IPAM vs. router comparison: Does the subnet mask and gateway in IPAM match the router interface configuration?
+- VLAN verification: Is the correct VLAN tagged on the switch ports for this subnet?
+- Route table: Does the router have a route for this subnet on the correct interface?
+- Overlap check: Does the new subnet overlap with any existing allocation in IPAM?
+
+RESOLUTION PATHS:
+- IPAM sync: Update IPAM to reflect actual network configuration or vice versa — determine which is the source of truth
+- VLAN fix: Correct VLAN assignment on switch; verify trunk configuration between switches and router
+- Gateway fix: Configure correct IP on router interface; verify interface is up
+- Overlap resolution: Renumber one of the overlapping subnets; requires coordination with affected device owners
+- DNS update: Create reverse zone for new subnet; generate PTR records

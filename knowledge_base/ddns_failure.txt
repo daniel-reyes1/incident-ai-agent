@@ -1,0 +1,35 @@
+=====================================
+INCIDENT TYPE 9: DDNS UPDATE FAILURE
+=====================================
+
+DESCRIPTION:
+Dynamic DNS (DDNS) updates from DHCP server to DNS server are failing, causing DNS records to become stale or missing for dynamically addressed clients. Devices receive IP addresses from DHCP but DNS does not reflect their current addresses.
+
+SYMPTOMS:
+- DNS lookup for a dynamically addressed hostname fails or returns an old IP
+- DHCP server logs show DDNS update errors or timeouts
+- DNS zone shows records with old IPs for devices that have renewed leases
+- Applications that rely on hostname resolution for internal clients fail intermittently
+- Reverse DNS (PTR) records missing or incorrect for DHCP clients
+
+PROBABLE ROOT CAUSES (ranked by frequency):
+1. TSIG key mismatch — the shared secret used to authenticate DDNS updates between DHCP and DNS servers has become inconsistent
+2. DNS server not accepting dynamic updates — zone configuration changed to static; dynamic updates disabled
+3. Network connectivity issue between DHCP and DNS server — update packets being dropped
+4. DNS server ACL blocking DDNS updates — access control list not permitting updates from DHCP server IP
+5. Zone not configured for dynamic updates on DNS side — allow-update directive missing or incorrect
+6. Clock skew between DHCP and DNS servers — TSIG authentication fails if server clocks differ by more than 5 minutes
+
+DIAGNOSTIC INDICATORS:
+- DHCP logs: What specific error is the DHCP server reporting when DDNS updates fail? (REFUSED, NOTAUTH, SERVFAIL, timeout?)
+- DNS zone configuration: Is the zone configured to allow dynamic updates? From which source IPs?
+- TSIG key: Are the TSIG key name and secret identical on both DHCP and DNS servers?
+- Clock sync: Are both servers synchronized to NTP? What is the time difference between them?
+- Manual test: Can a manual nsupdate command succeed from the DHCP server to the DNS server?
+
+RESOLUTION PATHS:
+- TSIG mismatch: Regenerate TSIG key; update configuration on both DHCP and DNS servers simultaneously
+- Zone configuration: Re-enable dynamic updates on DNS zone; add correct allow-update ACL
+- ACL fix: Add DHCP server IP to DNS server's allow-update or allow-query-on ACL
+- Clock fix: Synchronize both servers to the same NTP source; verify time difference is under 1 minute
+- Network fix: Verify connectivity from DHCP to DNS on port 53 TCP and UDP; check firewall rules
