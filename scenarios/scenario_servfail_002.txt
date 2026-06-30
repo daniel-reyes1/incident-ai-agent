@@ -1,0 +1,101 @@
+SCENARIO: SERVFAIL-002
+INCIDENT TYPE: SERVFAIL Rate Spike
+DIFFICULTY: Hard — multi-loop convergence (2 investigation cycles before resolution)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Customers and a couple of remote staff reporting intermittent SERVFAIL / 'site can't be reached' errors for api.novaridge.example, going on for about 4 hours now. Comes and goes, not every request. Reports spread across different, unrelated networks again — doesn't point at one location or one customer. No firewall alerts, nothing that looks like an attack."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: SERVFAIL rate spike
+Confidence: 84%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: SERVFAIL rate spike
+Scope assessment: Affects external resolution of api.novaridge.example, reports span multiple unrelated external networks
+Severity: High — external-facing, customer-visible, ongoing for several hours
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked) — ROUND 1
+=====================================
+1. DNSSEC ZSK signature expiration on the zone (likelihood: high) — reasoning: intermittent, partial SERVFAILs across unrelated external networks typically traces to a validating resolver rejecting a stale signature, the same pattern seen in prior incidents on this domain family
+2. DDoS / query flood against the authoritative servers (likelihood: medium) — reasoning: possible cause under load, but no associated traffic spike has been reported
+3. Authoritative server reachability or network issue (likelihood: medium) — reasoning: would usually produce more consistent timeouts and would likely already be flagged by monitoring
+4. Malicious SERVFAIL flood concentrated from a single attacking source (likelihood: low) — reasoning: the broad multi-network pattern argues against a single attacking source
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN — ROUND 1
+=====================================
+Step 1: Check per-source-IP concentration of SERVFAIL responses — rules in/out: hypothesis 4
+Step 2: Check DNSSEC ZSK/RRSIG signature expiration timestamps for the zone — rules in/out: hypothesis 1
+Step 3: Check authoritative server health and reachability metrics — rules in/out: hypothesis 3
+Step 4: Check for recent or ongoing traffic volume spikes on the authoritative servers — rules in/out: hypothesis 2
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system) — ROUND 1
+=====================================
+"SERVFAILs are spread across a lot of different source IPs again, nothing concentrated, so still doesn't look like an attack. Checked the ZSK and RRSIG this time and they're actually fine, signature is valid, expires three weeks from now, rollover ran on schedule last cycle. Authoritative servers look healthy, normal CPU and response times. No traffic spike on the auth servers either. Honestly not sure what's causing it at this point, the usual checks all came back clean."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT — ROUND 1
+=====================================
+Updated ranking: Hypothesis 1 ruled out — ZSK/RRSIG signature confirmed valid, directly contradicting the expired-signature explanation
+Hypothesis 4 ruled out: SERVFAIL sources broadly distributed, inconsistent with an attack pattern
+Hypothesis 3 ruled out: authoritative servers healthy across all monitored metrics
+Hypothesis 2 ruled out: no traffic volume anomaly detected
+Convergence decision: NOT RESOLVED — every ranked hypothesis has been ruled out and no cause is currently confirmed. The evidence contradicts the leading hypothesis without surfacing a replacement. Looping back to investigation planning to expand the hypothesis space beyond the original ranked list.
+Confidence: 0% (no hypothesis currently supported)
+
+=====================================
+STAGE 2B — EXPANDED HYPOTHESIS (post-loop)
+=====================================
+5. DNSSEC chain-of-trust break between the zone and its parent — specifically a Key Signing Key / Delegation Signer (KSK/DS) mismatch (likelihood: high, newly introduced) — reasoning: round 1 confirmed the zone's own ZSK and RRSIG are valid, but that only proves the zone's internal signing is intact, not that the parent zone's published DS record still matches the zone's current KSK. A validating resolver checks both; a KSK/DS mismatch produces the same intermittent SERVFAIL symptom even with a perfectly valid ZSK. This check was not in the original investigation plan because ZSK expiration is the far more common cause of this symptom and was reasonably checked first.
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN — ROUND 2
+=====================================
+Step 1: Retrieve the DS record currently published at the parent zone/registrar for novaridge.example — rules in/out: part of hypothesis 5
+Step 2: Compare the parent's DS record against a hash of the zone's current KSK — rules in/out: confirms or refutes a KSK/DS mismatch directly
+Step 3: Check change history for any recent KSK rollover or registrar-side DNSSEC update — rules in/out: identifies how a mismatch could have happened, if confirmed
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system) — ROUND 2
+=====================================
+"Pulled the DS record from the registrar and compared it against our current KSK hash, and they don't match. Looked into it further and there was a KSK rollover done about 5 weeks ago as part of routine key maintenance, but whoever did it apparently didn't push the updated DS record to the registrar afterward, so the registrar's been holding a DS record pointing at our old, retired KSK this whole time. Makes sense why it's intermittent too, depends on which resolvers cached the old chain of trust versus which ones are doing a fresh validation now."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT — ROUND 2
+=====================================
+Updated ranking: Hypothesis 5 confirmed (KSK/DS mismatch — the registrar's published DS record was never updated after a KSK rollover 5 weeks ago)
+Hypotheses 1-4 remain ruled out from round 1, consistent with round 2 findings
+Convergence decision: Resolved, no further loop needed
+Confidence: 95%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: A Key Signing Key (KSK) rollover performed approximately 5 weeks ago was not followed by an update to the Delegation Signer (DS) record at the parent zone/registrar. This left a broken chain of trust: the zone's own ZSK and RRSIG records are valid, as correctly confirmed in the first investigation pass, but DNSSEC-validating resolvers checking the chain up to the parent zone find a DS record that no longer matches the zone's current KSK, and intermittently return SERVFAIL depending on each resolver's cache state. Because this is a KSK/DS-level issue rather than a ZSK-level one, it cannot be fixed entirely within the zone — it requires coordinating a DS record update at the registrar.
+
+EVIDENCE TRAIL:
+- Round 1 — SERVFAIL source distribution: broad, inconsistent with an attack pattern
+- Round 1 — ZSK/RRSIG signature: confirmed valid, ruled out as cause
+- Round 1 — authoritative server health and traffic volume: both normal, both ruled out
+- Round 2 — parent zone DS record vs. current KSK hash: confirmed mismatch
+- Round 2 — change history: KSK rollover performed approximately 5 weeks ago, DS record update never pushed to the registrar
+
+REMEDIATION STEPS:
+1. Immediate: generate and submit the corrected DS record reflecting the current KSK to the registrar
+2. Immediate: monitor resolver-side validation as the corrected DS record propagates, since propagation timing varies by resolver and TTL and explains why the fix won't be instantaneous everywhere
+3. Medium-term: add a registrar DS-record verification step as a mandatory, non-skippable part of the KSK rollover procedure, not a follow-up task
+4. Long-term: add automated monitoring that periodically compares the published DS record at the registrar against the zone's actual current KSK, independent of existing ZSK/RRSIG expiration alerting, so KSK/DS drift is caught even when nothing inside the zone itself looks wrong
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================
