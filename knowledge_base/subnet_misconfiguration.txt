@@ -11,6 +11,7 @@ SYMPTOMS:
 - IPAM shows subnet with parameters that do not match router or switch configuration
 - Devices receive correct IP but incorrect subnet mask, causing them to misclassify remote hosts as local
 - New subnet deployment fails to route traffic correctly
+- Routing or filtering policy has become unexpectedly complex following a network reorganization, with no single clear misconfiguration but degraded performance and increased administrative error rate
 
 PROBABLE ROOT CAUSES (ranked by frequency):
 1. IPAM record not synchronized with router/switch configuration — IPAM shows one mask or gateway, device is configured differently
@@ -19,6 +20,7 @@ PROBABLE ROOT CAUSES (ranked by frequency):
 4. Gateway IP not configured or down — router interface for the subnet is missing, wrong IP, or administratively down
 5. Overlapping subnet — new subnet overlaps with existing allocation; routing table conflict
 6. DNS not updated — new subnet's reverse DNS zone not created; PTR records failing
+7. Fragmented IP space from reorganization — during mergers, acquisitions, or restructuring, subnets get split and reassigned without a structured plan. Address blocks end up haphazardly allocated (a few addresses claimed at the start of a range, more at the end, no contiguous aggregation), which doesn't cause an immediate outage but compounds into excessive routing table entries, harder-to-define filtering policy, and a higher rate of human error on every subsequent change. This is a slow-building misconfiguration risk rather than a single bad config — it surfaces as "everything about this segment is harder than it should be" rather than a clean symptom.
 
 DIAGNOSTIC INDICATORS:
 - Reachability test: Can devices reach their configured default gateway? Can they reach devices on other subnets?
@@ -26,6 +28,7 @@ DIAGNOSTIC INDICATORS:
 - VLAN verification: Is the correct VLAN tagged on the switch ports for this subnet?
 - Route table: Does the router have a route for this subnet on the correct interface?
 - Overlap check: Does the new subnet overlap with any existing allocation in IPAM?
+- Fragmentation check: Is this subnet part of a contiguous, aggregated block, or is it a remnant from a prior split/reorganization? If aggregation has degraded, check whether routing table size or filtering rule count for this segment has grown disproportionately compared to similar segments — that's a sign the subnet plan itself needs restructuring, not just a single configuration fix
 
 RESOLUTION PATHS:
 - IPAM sync: Update IPAM to reflect actual network configuration or vice versa — determine which is the source of truth
@@ -33,3 +36,10 @@ RESOLUTION PATHS:
 - Gateway fix: Configure correct IP on router interface; verify interface is up
 - Overlap resolution: Renumber one of the overlapping subnets; requires coordination with affected device owners
 - DNS update: Create reverse zone for new subnet; generate PTR records
+- Fragmentation: Re-aggregate the affected block where possible — this typically requires a planned renumbering project rather than a quick fix, since it involves coordinating with every device and policy attached to the fragmented range. Treat this as a structural remediation, not an incident-response action; the immediate incident may be resolvable with a point fix while the fragmentation itself gets scheduled as separate follow-up work
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP "10 Key Best Practices for Efficient IP Address Management" white paper (public, REV C-1708)
+Data classification: Public knowledge only — no proprietary or customer data

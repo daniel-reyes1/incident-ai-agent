@@ -3,7 +3,9 @@ INCIDENT TYPE 10: DNS HIJACKING INDICATORS
 =====================================
 
 DESCRIPTION:
-DNS responses are being tampered with — either by a malicious actor or a misconfigured device — causing clients to receive incorrect IP addresses for legitimate domain names. A security incident category requiring escalation.
+DNS responses are being tampered with — either by a malicious actor or a misconfigured device — causing clients to receive incorrect IP addresses for legitimate domain names. A security incident category requiring escalation. This file also covers the broader category of behavioral DNS attacks (cache poisoning, tunneling, flooding, reflective attacks) that share detection methodology with classic hijacking, even when they don't always involve response tampering directly.
+
+NOTE ON SCOPE: Some attack types below (sloth domain, tunneling, flooding, distributed reflective) are not strictly "hijacking" in the narrow sense of response tampering — they are DNS-based attacks more broadly. They are grouped here because this is the closest fit among the 10 incident types and because EfficientIP's own product (DNS Guardian) treats them under the same behavioral threat detection umbrella. When writing scenarios, be precise about which sub-type is being depicted.
 
 SYMPTOMS:
 - Users report being redirected to unexpected or suspicious websites when accessing known-good URLs
@@ -12,27 +14,53 @@ SYMPTOMS:
 - DNS monitoring detects responses from unexpected source IPs for authoritative queries
 - Specific domains resolve to different IPs from different network locations
 - DNSSEC validation failures on previously valid signed zones
+- Abnormal proportion of NXDOMAIN or SERVFAIL responses concentrated on specific source IPs
+- Unusual latency on responses to specific clients (potential sloth domain targeting)
+- Spike in non-cached queries with abnormal payload size from a single source
 
 PROBABLE ROOT CAUSES (ranked by frequency):
 1. Rogue DNS server on network — a device responding to DNS queries before the legitimate server (ARP spoofing or DHCP-based attack)
-2. DNS cache poisoning — attacker has injected fraudulent records into resolver cache (Kaminsky-style attack)
+2. DNS cache poisoning — attacker has injected fraudulent records into resolver cache (Kaminsky-style attack); mitigated by EDNS DNS cookies, source port randomization, and cryptographically-secure transaction nonces, though only DNSSEC validation guarantees record authenticity. Note: this guarantee only holds while the zone's own DNSSEC signatures are current — a lapsed ZSK or a KSK/DS mismatch (see servfail_rate_spike.txt) opens a window where cache poisoning protection is effectively void even on a zone that has DNSSEC enabled. A SERVFAIL spike caused by signature lapse should be treated as a security exposure window, not just an availability problem, until the signature issue is resolved.
 3. Authoritative DNS server compromise — legitimate DNS server has had its zone records modified by an attacker
 4. BGP hijacking affecting DNS infrastructure — upstream routing manipulation redirecting DNS traffic
 5. Malware on client or DNS server — malicious software modifying DNS responses or hosts file
 6. Misconfigured split-DNS — internal resolver returning wrong records due to configuration error (not malicious but same symptoms)
+7. NXDOMAIN attack — high proportion of NXDOMAIN answers from a single source IP, typically a reconnaissance or DoS attempt against the resolver
+8. Random subdomain / phantom domain attack — high proportion of combined NXDOMAIN and SERVFAIL answers per source IP, designed to exhaust resolver capacity by forcing recursive lookups against non-existent or unresponsive subdomains
+9. Sloth domain attack — a client is being directed to a domain name server deliberately crafted to respond slowly, tying up recursive engine resources waiting on replies
+10. DNS tunneling — abnormal volume or size of non-cached queries from a single source, typically used for data exfiltration or covert command-and-control channels
+11. Distributed reflective attack — abnormal query rate per source IP, often involving spoofed source addresses, using DNS infrastructure as an amplification vector for attacks against third parties
+12. DNS flooding — overall traffic volume exceeds normal baseline without a single identifiable source, threatening cache availability under volumetric load
 
 DIAGNOSTIC INDICATORS:
 - Response comparison: Do DNS responses from internal resolver match responses from external trusted resolvers (e.g., querying authoritative servers directly)?
 - Response source: Are DNS responses coming from the expected server IP?
 - Cache inspection: Does the resolver cache contain records with unexpected TTLs or IP addresses?
-- DNSSEC: If DNSSEC is enabled, are signatures valid? Hijacked responses typically fail DNSSEC validation
+- DNSSEC: If DNSSEC is enabled, are signatures valid? Hijacked responses typically fail DNSSEC validation. If signatures are currently invalid or expired (ZSK or KSK/DS issue), treat this zone as having no active cache-poisoning protection until resolved, regardless of DNSSEC being nominally "enabled"
 - Affected scope: Is hijacking affecting all clients or specific segments? Segment-specific suggests rogue device on that segment
 - Registrar check: Do the nameservers listed at the domain registrar match what the DNS is returning?
+- Per-source-IP NXDOMAIN ratio: Is a single source IP generating a disproportionate share of NXDOMAIN responses? Indicates NXDOMAIN attack or reconnaissance
+- Per-source-IP combined NXDOMAIN/SERVFAIL ratio: Elevated and concentrated on one source suggests phantom domain attack
+- Per-client response latency: Is a specific client waiting abnormally long for responses from a specific domain's nameserver? Indicates possible sloth domain targeting
+- Non-cached query size and volume: Abnormal size or frequency of non-cached queries from a single source suggests tunneling
+- Query rate per source IP: Sudden spike in query rate from a single or spoofed source suggests reflective or amplification attack
+- Invalid query proportion: Are queries arriving that don't comply with relevant RFCs? High volume of malformed queries can itself be the attack vector or a precursor to one
 
 RESOLUTION PATHS:
 - Immediate: Escalate to security team; this is a security incident, not a routine operational issue
 - Rogue server: Identify and isolate; flush resolver cache; verify clients return to correct DNS server
-- Cache poisoning: Flush resolver cache; implement DNS response rate limiting; enable DNSSEC validation
+- Cache poisoning: Flush resolver cache; implement DNS response rate limiting; enable DNSSEC validation; verify EDNS cookie and source port randomization are active if using a security-capable resolver. If DNSSEC signatures have lapsed, prioritize fixing that first (see servfail_rate_spike.txt) since the cache poisoning protection depends on it
 - Authoritative compromise: Take affected zones offline; restore from backup; rotate credentials; conduct forensic review
 - Client malware: Isolate affected clients; run malware remediation; check hosts file for tampering
-- Process: DNS hijacking should trigger your security incident response procedure, not just a DDI ticket
+- NXDOMAIN / phantom domain attack: Rate-limit or quarantine the offending source IP; this is generally more effective than signature or pattern-matching approaches, which tend to degrade resolver performance under load
+- Sloth domain attack: Isolate the client generating the slow-responding queries; investigate the target domain's nameserver for malicious intent
+- DNS tunneling: Block or rate-limit the source; inspect non-cached query payloads for exfiltration patterns; escalate to security team for forensic review
+- Distributed reflective attack: Apply per-source rate limiting; verify the network's own infrastructure is not permitting source IP spoofing, since that is the most effective root-cause prevention
+- DNS flooding: If a single source cannot be isolated, prioritize cache availability over recursive resolution continuity to maintain partial service; escalate to capacity/security review
+- Process: DNS hijacking and related behavioral attacks should trigger your security incident response procedure, not just a DDI ticket
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP DNS Guardian datasheet (public, REV C-220328); EfficientIP DNSSEC Management datasheet (public, REV C-251107) for the ZSK/KSK exposure-window cross-reference
+Data classification: Public knowledge only — no proprietary or customer data

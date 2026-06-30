@@ -12,6 +12,7 @@ SYMPTOMS:
 - ACLs on DNS server allow queries from unexpected source ranges
 - SOA serial numbers inconsistent between primary and secondary nameservers
 - TTL values on critical records changed without explanation
+- DNS or DHCP service options configured differently across servers that should be identical
 
 PROBABLE ROOT CAUSES (ranked by frequency):
 1. Manual changes made directly on DNS/DHCP server bypassing change management process
@@ -22,11 +23,13 @@ PROBABLE ROOT CAUSES (ranked by frequency):
 6. Unauthorized access — configuration changed by someone without proper authorization
 
 DIAGNOSTIC INDICATORS:
-- Change log comparison: Do recent configuration changes in the CMDB/change log account for all observed differences?
+- Change log comparison: Do recent configuration changes in the CMDB/change log account for all observed differences? An effective change log should capture Who made the change, What was changed, and When — if any of these three is missing or ambiguous for the suspected change window, treat the log itself as incomplete and widen the investigation rather than trusting a partial record
 - Diff against baseline: Compare current configuration against last known good backup
 - Replication status: Are all DNS/DHCP nodes in the cluster showing consistent configuration?
+- Cross-server configuration comparison: Compare DNS and DHCP service options (not just zone data, but server-level settings like forwarders, ACLs, and scope parameters) across all servers that are supposed to be configured identically. Drift often shows up first as an option-level inconsistency between servers rather than a visible symptom — this is worth checking even when no specific incident has been reported, as a periodic audit step
 - Access logs: Who accessed the DNS/DHCP management interface in the relevant time window?
 - Automated job logs: Did any provisioning or orchestration jobs run against these systems recently?
+- DNS-vs-IPAM comparison: Does the live DNS database match what IPAM has recorded as the source of truth? A mismatch here is itself a drift indicator independent of any other symptom
 
 RESOLUTION PATHS:
 - Immediate: Document the drift; assess whether current or baseline configuration is correct
@@ -34,3 +37,10 @@ RESOLUTION PATHS:
 - Process fix: Enforce change management controls; disable direct server access where possible
 - Replication repair: Force resynchronization across all nodes; verify replication health monitoring
 - Audit: Conduct access log review; identify source of unauthorized changes
+- Logging fix: If the change log lacks consistent Who-What-When detail, that's a separate process gap to flag and fix alongside resolving the immediate drift — otherwise the next drift incident will be just as hard to trace
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP "10 Key Best Practices for Efficient IP Address Management" white paper (public, REV C-1708)
+Data classification: Public knowledge only — no proprietary or customer data

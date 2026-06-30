@@ -26,6 +26,8 @@ DIAGNOSTIC INDICATORS:
 - IPAM records: What does IPAM show for that IP — assigned, reserved, or available?
 - Switch port: Which physical or virtual switch ports are the conflicting MACs connected to?
 - DHCP exclusion ranges: Are static IP assignments properly excluded from DHCP scope?
+- MAC-IP association history: Pull the historical MAC-to-IP association for this address from IPAM or discovery tooling, not just the current snapshot. If the address has had multiple distinct MACs associated with it over a short window, that points toward a reused or cloned device rather than a simple static/DHCP overlap
+- Conflictual port assignment: Check whether the same IP-and-port combination is registered against more than one device record in IPAM — this catches conflicts that ARP alone won't surface, particularly for services bound to specific ports rather than whole-host conflicts
 
 RESOLUTION PATHS:
 - Static/DHCP conflict: Add the static IP to the DHCP exclusion range immediately; reconfigure the static device to use an IP outside the DHCP scope
@@ -33,3 +35,9 @@ RESOLUTION PATHS:
 - IPAM sync: Run IPAM discovery scan to reconcile records with actual network state
 - VM conflict: Identify cloned VM; assign new IP; update DNS and IPAM
 - Rogue device: Identify from switch port and MAC; isolate or remove from network
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP "10 Key Best Practices for Efficient IP Address Management" white paper (public, REV C-1708)
+Data classification: Public knowledge only — no proprietary or customer data

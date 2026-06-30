@@ -1,9 +1,3 @@
-DDI INCIDENT INVESTIGATION REFERENCE
-=====================================
-Source: Public DDI operational knowledge, DNS/DHCP/IPAM best practices
-Scope: Incident types, symptoms, root causes, diagnostic indicators
-Purpose: Knowledge base for AI-assisted DDI incident investigation
-
 =====================================
 INCIDENT TYPE 1: SERVFAIL RATE SPIKE
 =====================================
@@ -20,24 +14,37 @@ SYMPTOMS:
 
 PROBABLE ROOT CAUSES (ranked by frequency):
 1. Upstream forwarder or resolver unreachable — most common cause; the recursive resolver cannot reach its configured upstream DNS servers
-2. DNSSEC validation failure — signed zone has expired or invalid signatures, causing validating resolvers to return SERVFAIL instead of the record
+2. DNSSEC validation failure — has two distinct sub-causes with different severity and resolution paths:
+   (a) Zone Signing Key (ZSK) issue — the zone's own signature has expired or failed to re-sign. ZSK rollover is typically automated on a roughly 30-day cycle, so an expired ZSK signature usually indicates a failed automated rollover rather than a one-off manual error. This is fixable within the zone.
+   (b) Key Signing Key (KSK) / Delegation Signer (DS) mismatch — the chain of trust between the zone and its parent zone (registrar or parent nameserver) is broken, typically because a KSK rollover was not properly coordinated with the DS record published at the parent. This is more severe than a ZSK issue because it breaks trust at the delegation level, not just within the zone, and cannot be fixed unilaterally — it requires coordination with the registrar or parent zone operator.
 3. Zone transfer failure — secondary nameserver has stale or missing zone data because zone transfer from primary failed
 4. Authoritative server misconfiguration — zone file syntax error, missing SOA record, or incorrect delegation
 5. Resource exhaustion on DNS server — CPU, memory, or file descriptor limits reached; server drops or fails queries
 6. Network-level filtering — firewall rule change blocking DNS traffic on port 53 (UDP/TCP)
+7. Attack-driven spike — distinguish this from infrastructure-driven causes before investigating further; see diagnostic indicator below
 
 DIAGNOSTIC INDICATORS:
 - Scope: Is SERVFAIL affecting all queries or specific zones/domains only? Zone-specific points to authoritative issue; global points to forwarder or network
 - Timing: Did the spike correlate with a configuration change, maintenance window, or certificate/signature expiry?
-- DNSSEC: Is DNSSEC enabled? Check signature expiry dates on affected zones
+- DNSSEC scope: If DNSSEC is enabled and validation is failing, is the issue isolated to the zone's own signature (ZSK), or does it affect the trust chain to the parent zone (KSK/DS)? Check whether the DS record published at the parent/registrar matches what the zone is currently using — a mismatch points to an uncoordinated KSK rollover, not a simple expired signature
+- Expiration alerting: Did the DNS management system generate a key-expiration alert before the signature actually expired? If yes, was it missed or ignored. If no alert exists, the alerting threshold itself may need review
 - Forwarder reachability: Can the resolver reach its configured upstream IPs on port 53?
 - Zone transfer logs: Any failed AXFR/IXFR transfers in the hours before the spike?
 - Server resources: CPU, memory, and connection counts on the DNS server at time of spike
+- Per-source-IP concentration: Is the SERVFAIL increase distributed evenly across clients, or concentrated on responses to a small number of source IPs? Concentration on one or few sources is a signal of a phantom domain or random subdomain attack rather than an infrastructure fault — check this before assuming the cause is purely operational
 
 RESOLUTION PATHS:
 - Forwarder unreachable: Restore network path or switch to alternate forwarder; check firewall rules
-- DNSSEC failure: Re-sign zone or extend signature validity; check DNSKEY and RRSIG records
+- ZSK issue: Re-sign the zone manually if the automated rollover failed; investigate why the automated rollover did not complete (this is fixable within the zone alone)
+- KSK/DS mismatch: Coordinate with the parent zone operator or registrar to update the published DS record to match the zone's current KSK; this cannot be resolved unilaterally and will likely take longer than a ZSK fix — set expectations accordingly
 - Zone transfer failure: Investigate network between primary and secondary; check TSIG keys if used; force manual zone transfer
 - Misconfiguration: Review zone file syntax; validate with named-checkzone or equivalent tool
 - Resource exhaustion: Increase server resources or tune resolver cache and rate limits
 - Firewall block: Review recent ACL changes; restore port 53 access from resolver to upstream
+- Attack-driven: If diagnostics point to a concentrated source IP pattern, treat as a security incident — see dns_hijacking.txt for phantom domain / random subdomain attack handling, since the resolution path differs from infrastructure fixes (rate-limit or quarantine the source rather than fixing a configuration)
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP DNS Guardian datasheet (public, REV C-220328); EfficientIP DNSSEC Management datasheet (public, REV C-251107)
+Data classification: Public knowledge only — no proprietary or customer data

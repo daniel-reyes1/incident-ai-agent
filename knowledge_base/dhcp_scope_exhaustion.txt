@@ -27,6 +27,7 @@ DIAGNOSTIC INDICATORS:
 - Lease time setting: What is the configured lease duration? Is it appropriate for this segment type?
 - Scope boundaries: Is the scope size appropriate for the number of devices expected on this segment?
 - Failover state: If DHCP failover is configured, what is the split ratio and state of the partner server?
+- Unused range identification: Run an audit against the scope to identify specifically which leases are stale (MAC not seen on the network in a defined window) versus which static reservations are no longer associated with an active device. This distinction matters for resolution — stale dynamic leases can simply be cleared, but unused static reservations need to be confirmed as actually decommissioned before reclaiming them, since reclaiming a reservation still tied to an intermittently-connecting device will just create a new conflict
 
 RESOLUTION PATHS:
 - Immediate relief: Reduce lease time to accelerate address recycling; manually clear confirmed stale leases
@@ -34,4 +35,10 @@ RESOLUTION PATHS:
 - Subnet resize: If no room to expand, resize the subnet (requires coordination with routing/firewall teams)
 - Rogue device: Identify offending MAC from lease logs; isolate device from network
 - Failover fix: Reconfigure failover split or resynchronize partner server state
-- Long-term: Implement IPAM-driven capacity alerting to catch exhaustion before it occurs
+- Long-term: Implement IPAM-driven capacity alerting to catch exhaustion before it occurs; pair this with a recurring audit cycle for stale leases and unused static reservations rather than only reacting when utilization is already critical
+
+=====================================
+END OF SECTION
+=====================================
+Sources: General DDI operational knowledge; EfficientIP "10 Key Best Practices for Efficient IP Address Management" white paper (public, REV C-1708)
+Data classification: Public knowledge only — no proprietary or customer data
