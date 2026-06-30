@@ -1,0 +1,75 @@
+SCENARIO: IPCONFLICT-001
+INCIDENT TYPE: IP Address Conflict
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Two reports today of laptops in the warehouse ops team getting 'IP address conflict' Windows popups and dropping off the network intermittently. Both devices are on the same subnet (10.50.4.0/24). Swapped one laptop's network cable as a first guess but the issue followed the laptop, not the port. Started this morning, wasn't happening yesterday."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: IP address conflict
+Confidence: 93%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: IP address conflict
+Scope assessment: Localized to subnet 10.50.4.0/24 (Warehouse Ops)
+Severity: Medium — intermittent connectivity drops, not a full outage
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. A statically-assigned IP overlapping with a DHCP-leased address in the same range (likelihood: high) — reasoning: the conflict following the device rather than the port rules out a cabling/port issue and points to an address-level problem
+2. A reused or cloned device (e.g. a re-imaged laptop) carrying over a stale IP/MAC association from before (likelihood: medium) — reasoning: plausible if recent bulk imaging happened on that floor
+3. Two DHCP scopes overlapping due to a subnet configuration error (likelihood: medium) — reasoning: consistent with the symptom, but would likely affect more than just two devices
+4. A second, unmanaged DHCP server handing out conflicting addresses (likelihood: low) — reasoning: would typically show a broader, faster-onset pattern across more devices than just two
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check IPAM for any static reservation in 10.50.4.0/24 overlapping with the DHCP scope's dynamic range — rules in/out: hypothesis 1
+Step 2: Check MAC-IP association history for the two affected devices, looking for a prior different IP on record — rules in/out: hypothesis 2
+Step 3: Check the DHCP scope configuration for 10.50.4.0/24 against any neighboring scope definitions — rules in/out: hypothesis 3
+Step 4: Check DHCP server logs for lease offers coming from any server other than the authorized one — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Found it pretty quick — there's a static reservation in IPAM for 10.50.4.50 assigned to an old label printer, but that exact address also sits inside the DHCP scope's dynamic range, so it can get handed out to a laptop too. Checked MAC-IP history for both laptops and neither has any conflicting prior record, both look like normal continuous history, doesn't seem like a re-imaging issue. The DHCP scope definition for that subnet looks fine on its own, no overlap with another scope that we could find. Checked the lease logs and all offers are coming from our one authorized DHCP server, nothing else responding."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (static reservation overlapping with the dynamic DHCP range)
+Hypothesis 2 ruled out: no anomalous MAC-IP history on either device
+Hypothesis 3 ruled out: scope definition clean, no overlap found
+Hypothesis 4 ruled out: only the authorized DHCP server is responding
+Convergence decision: Resolved, no further loop needed
+Confidence: 94%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: A statically-reserved address (10.50.4.50, assigned to a label printer) falls inside the DHCP scope's dynamic leasable range for the 10.50.4.0/24 subnet. When the DHCP server leased that same address to a laptop, it created a live conflict with the statically-configured printer, producing intermittent address conflicts on whichever device received the overlapping lease.
+
+EVIDENCE TRAIL:
+- IPAM static reservation: 10.50.4.50, reserved for the label printer, falls within the DHCP dynamic range
+- MAC-IP association history: no anomalies on either affected laptop, rules out a reused/cloned device
+- DHCP scope configuration: no overlap with neighboring scopes
+- DHCP server logs: single authorized server, no rogue DHCP activity
+
+REMEDIATION STEPS:
+1. Immediate: exclude the statically-reserved address range (including 10.50.4.50) from the DHCP scope's dynamic pool
+2. Immediate: release and renew the lease on the affected laptop(s) to obtain a non-conflicting address
+3. Medium-term: audit the subnet for any other static reservations that fall inside the dynamic range
+4. Long-term: establish a standard exclusion-range practice in IPAM so static reservations are always carved out of dynamic pools at scope creation time
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

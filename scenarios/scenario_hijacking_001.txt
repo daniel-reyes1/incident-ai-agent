@@ -1,0 +1,77 @@
+SCENARIO: HIJACKING-001
+INCIDENT TYPE: DNS Hijacking Indicators — Sub-type: Cache Poisoning
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"A couple of employees said their browser threw a certificate mismatch warning going to our intranet portal (intranet.novaridge.com) this morning, then it seemed to clear up after they retried later. IT also noticed something odd in the resolver logs around the same time — an answer for that hostname that didn't match what we'd expect. Happened on one internal resolver, nothing reported anywhere else yet."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: DNS hijacking indicators (cache poisoning)
+Confidence: 76%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: DNS hijacking indicators — sub-type: suspected cache poisoning (response tampering on an internal resolver), distinct from the volumetric/tunneling sub-types grouped under the same broad category
+Scope assessment: Isolated, so far, to a single internal resolver and a single hostname
+Severity: High — even an isolated instance of cache poisoning is a security-relevant event requiring prompt confirmation
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. A cache poisoning attempt exploited a validation gap on that resolver — e.g. a lapsed DNSSEC signature or disabled source port randomization — temporarily serving a forged answer for intranet.novaridge.com (likelihood: high) — reasoning: a transient bad answer for an internal hostname, isolated to one resolver, paired with an explicit anomalous log entry, is the direct signature of a poisoning event rather than a benign misconfiguration
+2. A benign internal misconfiguration, e.g. a stale cached record from a recent IP change to the intranet server, coincidentally resembling a hijack (likelihood: medium) — reasoning: should be ruled out first as the simpler, non-malicious explanation
+3. A DNSSEC validation lapse on the resolver left a temporary exposure window, with the bad answer caused by something else (likelihood: medium) — reasoning: relevant as a contributing security gap even if not the direct mechanism
+4. A local client-side issue, e.g. malware or a manipulated hosts file on the affected employees' machines, rather than anything at the resolver level (likelihood: low) — reasoning: the resolver-side log anomaly makes a purely client-local explanation less likely, though not impossible
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check the resolver's detailed logs for the anomalous answer and compare the returned IP against the legitimate authoritative answer for intranet.novaridge.com — rules in/out: confirms whether a forged answer was actually served (hypothesis 1) versus a stale-but-once-legitimate answer (hypothesis 2)
+Step 2: Check whether source port randomization is enabled and functioning on that resolver, and check EDNS cookie support — rules in/out: hypothesis 1, identifying the likely exploitation mechanism
+Step 3: Check DNSSEC signature validity status and expiration history for the affected zone on that resolver — rules in/out: hypothesis 3
+Step 4: Check the affected employees' machines for local indicators, hosts file entries and malware scan results, independent of the resolver — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Pulled the detailed logs and the IP that got served for intranet doesn't match our actual server at all, it's an external address we don't own, so this looks like a genuinely forged answer, not just a stale cache of an old legit IP. Checked source port randomization on that resolver and it's actually disabled, someone must have turned it off at some point, ports are sequential instead of randomized which makes guessing the right response a lot easier for an attacker. EDNS cookies aren't enabled either. Checked DNSSEC and the signature for our zone had lapsed about two days before this happened, it expired and nobody caught it, so validation wasn't actually protecting us during that window. Checked the two employees' laptops directly, hosts files are clean and malware scans came back clean too, nothing locally that would explain it on their end."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (cache poisoning attempt succeeded, served a forged answer)
+Hypothesis 3 confirmed as a contributing factor rather than a separate cause: the lapsed DNSSEC signature created the exposure window that allowed the poisoning to succeed, alongside disabled source port randomization as the second exploited gap
+Hypothesis 2 ruled out: the served IP was external and never associated with the real server, not a stale legitimate address
+Hypothesis 4 ruled out: both affected machines clean on hosts file and malware scan
+Convergence decision: Resolved, no further loop needed
+Confidence: 90%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: A DNS cache poisoning attempt successfully served a forged answer for intranet.novaridge.com on one internal resolver. Two compounding gaps made this possible: source port randomization was disabled on the resolver, making response guessing significantly easier, and the zone's DNSSEC signature had lapsed two days prior without detection, removing the validation layer that would otherwise have rejected the forged response. Client-side checks on affected machines came back clean, confirming the issue originated at the resolver, not the endpoints.
+
+EVIDENCE TRAIL:
+- Resolver log comparison: served IP for intranet.novaridge.com did not match the legitimate authoritative answer, and was an external address with no prior association to the real server
+- Source port randomization: confirmed disabled on the affected resolver
+- EDNS cookies: not enabled
+- DNSSEC signature status: lapsed approximately 2 days before the incident, undetected
+- Client-side checks: hosts files and malware scans clean on both affected machines
+
+REMEDIATION STEPS:
+1. Immediate: flush the poisoned cache entry on the affected resolver and confirm it now resolves correctly
+2. Immediate: re-enable source port randomization on the resolver
+3. Immediate: renew the lapsed DNSSEC signature for the zone and confirm validation is active again
+4. Medium-term: enable EDNS cookie support on the resolver as an additional anti-spoofing layer
+5. Long-term: add expiration alerting for DNSSEC signatures — the same gap identified in the SERVFAIL-type incident — so a lapsed signature is caught before it becomes an exploitable window, and audit other resolvers for source port randomization being disabled
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

@@ -1,0 +1,75 @@
+SCENARIO: ROGUE-001
+INCIDENT TYPE: Rogue Device Detection
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Security flagged unusual traffic from an IP inside our 10.20.8.0/24 range (R&D lab subnet) — high volume of outbound connections to external IPs overnight, doesn't match any known asset's normal behavior. Nobody on the team recognizes it as one of their assigned machines. That subnet's had a lot of churn lately with the new internship cohort starting."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: Rogue device detection
+Confidence: 80%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: Rogue device detection
+Scope assessment: Single IP within 10.20.8.0/24 (R&D lab)
+Severity: High — unexplained device with unusual outbound traffic warrants prompt investigation regardless of confirmed intent
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. An unregistered personal or unmanaged device connected by an intern without going through asset provisioning (likelihood: high) — reasoning: subnet churn from a new intern cohort plus an unrecognized asset on a low-friction lab network is a common explanation to check before assuming compromise
+2. A previously decommissioned or unreturned device still physically connected and active (likelihood: medium) — reasoning: lab environments often have old hardware left plugged in after a project ends
+3. A genuinely unauthorized or compromised host (likelihood: medium) — reasoning: cannot be ruled out given the unusual outbound traffic pattern, stays open until evidence narrows it
+4. A monitoring or test tool misidentified as anomalous (likelihood: low) — reasoning: possible false positive, but high overnight outbound volume to external IPs is a less typical signature for internal test tooling
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Run a discovery scan against 10.20.8.0/24 and reconcile results against IPAM records — rules in/out: identifies which devices on the subnet are unaccounted for
+Step 2: Check the MAC address and DHCP lease hostname/vendor OUI associated with the flagged IP — rules in/out: distinguishes an unregistered personal device (hypothesis 1) from old decommissioned hardware (hypothesis 2)
+Step 3: Review the destination IPs/domains of the outbound traffic against known threat intel and legitimate business services — rules in/out: hypothesis 3 versus the more benign hypotheses
+Step 4: Trace the physical switch port the device is connected through and confirm against floor/desk assignments — rules in/out: helps narrow ownership across all hypotheses
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Ran the discovery scan against the lab subnet and reconciled against IPAM — found three devices present in discovery that aren't in IPAM at all, the flagged IP is one of them. MAC vendor OUI comes back as a common consumer laptop brand, not one of our standard-issue models, and the DHCP hostname is just a generic factory default, not one of our naming convention ones. Checked the outbound traffic destinations and they're mostly mainstream cloud storage and software update services, nothing on any threat intel list, looks like normal personal-laptop background traffic. Traced the switch port and it maps to a desk in the lab assigned to one of the new interns this week."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (unregistered personal device connected by a new intern, not provisioned through asset management)
+Hypothesis 2 ruled out: device is a current consumer laptop, not legacy decommissioned hardware
+Hypothesis 3 ruled out: outbound traffic matches benign consumer cloud/software services, no threat intel match
+Hypothesis 4 ruled out: traffic pattern and device profile don't match a test or monitoring rig
+Convergence decision: Resolved, no further loop needed
+Confidence: 89%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: An unregistered personal laptop, brought in by a newly-started intern, was connected directly to the R&D lab network without going through standard device provisioning. Discovery-to-IPAM reconciliation surfaced it — along with two other unaccounted-for devices — as present on the network but absent from inventory. The outbound traffic that triggered the original alert matches normal personal-device background activity rather than malicious behavior.
+
+EVIDENCE TRAIL:
+- Discovery-to-IPAM reconciliation: 3 devices found in the discovery scan with no corresponding IPAM record, including the flagged IP
+- MAC/OUI and DHCP hostname: consumer laptop vendor, factory-default hostname, inconsistent with the managed asset profile
+- Outbound traffic destinations: mainstream cloud storage/software update services, no threat intel matches
+- Physical port trace: maps to a desk newly assigned to an incoming intern
+
+REMEDIATION STEPS:
+1. Immediate: disconnect or restrict the unregistered device from sensitive network segments pending proper onboarding
+2. Immediate: confirm with the intern's manager that the device belongs to them and route it through standard BYOD/guest policy instead of the main lab subnet
+3. Medium-term: reconcile and account for the other two unregistered devices found in the same scan
+4. Long-term: make discovery-to-IPAM reconciliation a recurring scheduled check rather than only running it reactively after an alert, particularly timed around onboarding cohorts
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

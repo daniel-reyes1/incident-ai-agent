@@ -1,0 +1,75 @@
+SCENARIO: DDNS-001
+INCIDENT TYPE: DDNS Update Failure
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Several laptops that recently got new IP addresses, moving between docking stations and Wi-Fi, aren't reachable by hostname anymore, only by IP — internal tools that look things up by name are failing for those machines specifically. Other devices on the same subnets seem to update fine. Noticed over the last day or two, seems to be getting more common."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: DDNS update failure
+Confidence: 81%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: DDNS update failure
+Scope assessment: Limited to a subset of devices that recently changed network attachment point, not the whole subnet
+Severity: Medium — name resolution broken for specific hosts, IP-based access still works as a workaround
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. DDNS update requests from affected clients are failing or being rejected by the DNS server, e.g. an authentication issue (likelihood: high) — reasoning: works-by-IP-fails-by-name specifically for recently re-leased devices points at the update mechanism, and unaffected devices on the same subnet rule out a server-wide problem
+2. Stale DNS records for those hostnames pointing to the old IP, with no cleanup of the outdated entry (likelihood: medium) — reasoning: would also explain failure to reach by name, though this is more about old-record cleanup than the update itself failing
+3. A client-side issue preventing the affected laptops from sending DDNS update requests at all (likelihood: medium) — reasoning: plausible if affected machines share a common client configuration or recent change
+4. DHCP-DNS integration misconfigured so only some scopes are set up to trigger DDNS updates (likelihood: low) — reasoning: would typically affect a whole scope consistently rather than scattered specific devices
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check DNS server logs for DDNS update attempts from the affected hostnames around the time they got their new IPs — rules in/out: whether the update was attempted at all, separating hypothesis 1 from hypotheses 3/4
+Step 2: Check current DNS record values for the affected hostnames against their actual current IPs — rules in/out: hypothesis 2
+Step 3: Check client-side DDNS-related configuration on a couple of the affected laptops — rules in/out: hypothesis 3
+Step 4: Check DHCP scope configuration for DDNS update settings across the relevant subnets — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"DNS server logs do show update attempts coming in from the affected hostnames right around when they got their new IPs, so the requests are being sent, but the logs show them getting rejected, looks like an authentication failure each time. Checked the actual DNS records for those hostnames and they're still pointing at the old IPs, consistent with the update never landing. Looked at client DDNS settings on two of the affected laptops and they're configured the same as working machines, nothing different there. DHCP scope settings for DDNS updates look consistent across all the relevant subnets too, nothing scope-specific going on."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (DDNS update requests sent but rejected on authentication)
+Hypothesis 2 reclassified as a downstream effect of hypothesis 1 rather than a separate cause: stale records exist because updates are failing, not because of separate record-cleanup neglect
+Hypothesis 3 ruled out: client configuration consistent with working machines
+Hypothesis 4 ruled out: scope-level DDNS settings consistent across subnets
+Convergence decision: Resolved, no further loop needed
+Confidence: 88%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: DDNS update requests from affected clients are reaching the DNS server but being rejected due to an authentication failure, so the server never accepts the new IP-to-hostname mapping. This leaves the existing DNS record pointing at the device's previous IP, explaining why affected hosts are reachable by IP but not by name after moving to a new network attachment point.
+
+EVIDENCE TRAIL:
+- DNS server update logs: requests received from affected hostnames, consistently rejected on authentication
+- DNS record values: confirmed stale, still pointing to previous IPs
+- Client-side DDNS configuration: consistent with unaffected, working machines
+- DHCP scope DDNS settings: consistent across all relevant subnets
+
+REMEDIATION STEPS:
+1. Immediate: investigate the authentication mechanism between clients/DHCP and the DNS server for DDNS updates, e.g. expired credentials, a changed shared key, or a permissions change on the zone
+2. Immediate: manually correct the stale records for currently-affected hosts while the underlying issue is fixed
+3. Medium-term: confirm the fix resolves new updates going forward by monitoring update logs for continued rejections
+4. Long-term: add alerting on DDNS update rejection rates so an authentication-layer failure like this is caught before it accumulates across many devices
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

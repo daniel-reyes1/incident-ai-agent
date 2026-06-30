@@ -1,0 +1,75 @@
+﻿SCENARIO: DHCP-001
+INCIDENT TYPE: DHCP Scope Exhaustion
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Multiple users on the 3rd floor (Marketing) reporting no network access since this morning. Affected devices show 169.254.x.x addresses or 'limited connectivity' on Windows. Started around 8:45am, getting worse as more people arrive and connect. Wired and wireless both affected. No recent known changes to that floor's network."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: DHCP scope exhaustion
+Confidence: 91%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: DHCP scope exhaustion
+Scope assessment: Localized to a single subnet (3rd floor Marketing, VLAN 30)
+Severity: Medium-High — active business impact, growing, not yet network-wide
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. Scope undersized for current device count (likelihood: high) — reasoning: symptom pattern (worsens as more people arrive and connect) is classic signature of a scope filling up during business hours rather than a sudden failure
+2. Stale leases consuming scope capacity (likelihood: medium) — reasoning: possible if floor had recent device turnover, but no mention of recent moves or refresh in the report
+3. Lease time misconfigured too long (likelihood: medium) — reasoning: would compound any underlying capacity issue but unlikely to be sole cause of a same-day onset
+4. Rogue DHCP client exhausting scope (likelihood: low) — reasoning: would typically show a sharper, more sudden onset rather than gradual worsening through the morning
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check current scope utilization for VLAN 30 — rules in/out: confirms or refutes exhaustion as the actual state, not just a hypothesis
+Step 2: Check lease age distribution — rules in/out: distinguishes fresh-leases-at-capacity (hypothesis 1) from old-stale-leases-at-capacity (hypothesis 2)
+Step 3: Check configured lease duration for this scope — rules in/out: confirms or refutes hypothesis 3 as a contributing factor
+Step 4: Check for any single MAC address with unusually high lease request frequency — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Scope is at 100% utilization, 247/247 addresses leased. Lease ages are mostly fresh, less than 4 hours old. Lease time is set to 8 hours which seems normal. Checked lease table, no single MAC standing out, leases spread across normal-looking device names (laptops, phones)."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (scope undersized for current device count)
+Hypothesis 2 ruled out: lease ages are fresh, not stale
+Hypothesis 3 ruled out as primary cause: lease time is standard, not a contributing factor
+Hypothesis 4 ruled out: no anomalous MAC pattern
+Convergence decision: Resolved, no further loop needed
+Confidence: 95%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: DHCP scope for VLAN 30 (3rd floor Marketing) is undersized for current device population. Scope capacity (247 addresses) has been fully consumed by legitimate, actively-renewing devices, not stale leases or anomalous activity.
+
+EVIDENCE TRAIL:
+- Scope utilization: 100% (247/247)
+- Lease age distribution: fresh (under 4 hours), inconsistent with stale-lease exhaustion
+- Lease duration: 8 hours, within normal range, not a contributing misconfiguration
+- MAC pattern: normal, no rogue client signature
+
+REMEDIATION STEPS:
+1. Immediate: Extend scope range if contiguous IP space is available within the existing subnet boundary
+2. If no room to extend: reduce lease time temporarily to 2-4 hours to accelerate recycling while a permanent fix is planned
+3. Medium-term: resize the subnet to accommodate actual device population (requires coordination with network/routing team)
+4. Long-term: implement IPAM capacity alerting at 80% utilization threshold for this and comparable scopes to catch this before it becomes user-facing
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

@@ -1,0 +1,75 @@
+SCENARIO: SERVFAIL-001
+INCIDENT TYPE: SERVFAIL Rate Spike
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Getting reports of intermittent SERVFAIL / 'site can't be reached' errors for novaridge.com from a handful of external contacts and a couple of our own remote employees, going on about 2-3 hours now. Doesn't affect every request, comes and goes. No firewall alerts, nothing that looks like an attack on our end. Reports are from unrelated networks — a customer in Germany, one in the US, plus our own remote staff — not from one location."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: SERVFAIL rate spike
+Confidence: 88%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: SERVFAIL rate spike
+Scope assessment: Affects external resolution of novaridge.com, reports span multiple unrelated external networks rather than one location
+Severity: High — external-facing, customer-visible
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. DNSSEC signature expiration on the zone (likelihood: high) — reasoning: intermittent, partial SERVFAILs reported from a wide variety of unrelated external networks is the classic signature of validating resolvers rejecting an expired signature, rather than an attack or routing issue
+2. DDoS / query flood against the authoritative servers (likelihood: medium) — reasoning: can cause SERVFAILs under load, but no associated traffic spike or alert has been reported
+3. Authoritative server reachability or network issue (likelihood: medium) — reasoning: would typically cause more consistent timeouts rather than an intermittent pattern, and would likely already be flagged by infrastructure monitoring
+4. Malicious NXDOMAIN/SERVFAIL flood concentrated from a single attacking source (likelihood: low) — reasoning: would expect concentration from one or a few source IPs, not the broad multi-network pattern described
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check per-source-IP concentration of SERVFAIL responses in the query logs — rules in/out: distinguishes hypothesis 4 (attack, concentrated sources) from hypotheses 1-3 (infrastructure, distributed sources)
+Step 2: Check DNSSEC signature expiration timestamps for the zone, specifically the ZSK and RRSIG records — rules in/out: hypothesis 1
+Step 3: Check authoritative DNS server health and reachability metrics (CPU, response time, connectivity) — rules in/out: hypothesis 3
+Step 4: Check for any recent or ongoing traffic volume spike on the authoritative servers — rules in/out: hypothesis 2
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Pulled the query logs and the SERVFAILs are spread across a lot of different source IPs, nothing concentrated, so doesn't look like an attack pattern. Checked the zone signing and the RRSIG for the ZSK actually expired about 3 hours ago, the automated rollover didn't run, there's a cron job for that and it looks like it failed silently overnight. Authoritative servers look healthy, normal CPU and response times, nothing odd in connectivity. No unusual traffic volume on the auth servers either, looks like a normal weekday."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (DNSSEC ZSK signature expired after automated rollover failed)
+Hypothesis 4 ruled out: SERVFAIL sources broadly distributed, not concentrated, inconsistent with an attack pattern
+Hypothesis 3 ruled out: authoritative servers healthy across all monitored metrics
+Hypothesis 2 ruled out: no traffic volume anomaly detected
+Convergence decision: Resolved, no further loop needed
+Confidence: 96%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: The Zone Signing Key (ZSK) signature for novaridge.com expired after the automated rollover job failed silently. This caused DNSSEC-validating resolvers to intermittently return SERVFAIL once they detected the stale signature, which explains why only some requests and some networks were affected — it depends on each resolver's own validation behavior and cache state. This is a ZSK-level issue, not a Key Signing Key/Delegation Signer mismatch, so it can be fixed entirely within the zone without parent-zone or registrar coordination.
+
+EVIDENCE TRAIL:
+- SERVFAIL source distribution: broad, across unrelated external networks, inconsistent with a concentrated attack source
+- RRSIG/ZSK expiration: confirmed expired approximately 3 hours before the first reports
+- Authoritative server health: normal across CPU, response time, and connectivity
+- Traffic volume: no anomaly detected
+
+REMEDIATION STEPS:
+1. Immediate: manually trigger ZSK re-signing and republish the zone to restore valid signatures
+2. Immediate: identify why the automated rollover cron job failed silently and fix it
+3. Medium-term: add expiration alerting at a threshold before signature expiry (e.g. 7 days out) so a failed rollover is caught before it becomes user-facing
+4. Long-term: add a monitoring check that confirms the rollover job actually completed, not just that it ran
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

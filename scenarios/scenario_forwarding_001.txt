@@ -1,0 +1,75 @@
+SCENARIO: FORWARDING-001
+INCIDENT TYPE: DNS Forwarding Failure
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Branch office in Manchester reporting they can resolve internal company domains fine but can't reach any external websites — DNS-wise specifically, not a general internet outage, other non-DNS traffic seems to still flow. Started about an hour ago. Other branch offices are unaffected."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: DNS forwarding failure
+Confidence: 87%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: DNS forwarding failure
+Scope assessment: Manchester branch office only, other locations unaffected
+Severity: Medium-High — external resolution fully blocked at that location, internal services and other sites unaffected
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. The Manchester local DNS server's configured forwarder (upstream resolver for external domains) is unreachable (likelihood: high) — reasoning: internal-only resolution working but external failing, isolated to one site, is the textbook signature of a broken forwarding path
+2. A network path or firewall change is blocking the Manchester server's outbound DNS traffic to its forwarder (likelihood: medium) — reasoning: would produce the same symptom as hypothesis 1 from a different layer
+3. The forwarder IP itself was misconfigured or changed, e.g. pointing to a decommissioned server (likelihood: medium) — reasoning: plausible if any recent config change touched that server
+4. A general internet connectivity issue at the Manchester site, coincidentally appearing DNS-specific (likelihood: low) — reasoning: the report explicitly states other traffic still flows, making a general outage less likely
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check the Manchester DNS server's configured forwarder address for correctness — rules in/out: hypothesis 3
+Step 2: Test reachability from the Manchester DNS server to the configured forwarder IP — rules in/out: hypotheses 1 and 2
+Step 3: Check for any recent firewall/ACL changes affecting outbound DNS (port 53) traffic from that site — rules in/out: hypothesis 2
+Step 4: Confirm general internet connectivity status at the Manchester site independent of DNS — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Forwarder address configured on the Manchester server looks correct and hasn't changed recently as far as we can tell from the config history. Tried reaching that forwarder IP directly from the Manchester server and got no response at all, request just times out. Checked with the firewall team and there was a rule change pushed to that site's firewall yesterday evening as part of a broader security policy update, and it looks like it tightened outbound rules without carving out an exception for DNS over port 53 to the forwarder. General internet connectivity otherwise seems fine, other things like VPN and general browsing still work normally for that site."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 2 confirmed (firewall rule change blocking outbound DNS to the forwarder)
+Hypothesis 1 ruled out as an independent cause: the forwarder itself is not down, it is unreachable because of the firewall block covered under hypothesis 2
+Hypothesis 3 ruled out: forwarder address itself correct and unchanged
+Hypothesis 4 ruled out: general connectivity confirmed normal
+Convergence decision: Resolved, no further loop needed
+Confidence: 93%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: A firewall policy update pushed to the Manchester site the previous evening tightened outbound rules without including an exception for DNS traffic (port 53) to the configured forwarder. This blocked the local DNS server from reaching its forwarder for external domain resolution, while internal zone resolution — served locally rather than forwarded — continued to work normally.
+
+EVIDENCE TRAIL:
+- Forwarder configuration: correct and unchanged
+- Reachability test to forwarder: failed, request timeout
+- Firewall change history: new outbound rule policy pushed to the Manchester site the prior evening, no DNS/port 53 exception included
+- General connectivity: confirmed normal for non-DNS traffic
+
+REMEDIATION STEPS:
+1. Immediate: add an explicit outbound allow rule for DNS (port 53, and 853 if DNS-over-TLS is in use) from the local DNS server to the forwarder IP
+2. Immediate: verify external resolution is restored at the Manchester site after the rule update
+3. Medium-term: review the same firewall policy template for other sites it may have been or will be pushed to, to prevent recurrence elsewhere
+4. Long-term: add DNS forwarding ports to the standard checklist for firewall policy changes affecting any site's DNS infrastructure
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

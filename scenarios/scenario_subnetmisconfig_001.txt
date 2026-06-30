@@ -1,0 +1,75 @@
+SCENARIO: SUBNETMISCONFIG-001
+INCIDENT TYPE: Subnet Misconfiguration
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Network team rolled out a new firewall rule this morning meant to block a specific service across all of Finance's subnets. Getting reports back that it worked for some Finance users but not others — looks like it only applied to part of the Finance address space. Finance is supposed to be one logical group but apparently spans more than one IP range."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: Subnet misconfiguration
+Confidence: 78%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: Subnet misconfiguration (manifesting as inconsistent policy application due to the underlying address space structure)
+Scope assessment: Finance department's address space, appears to span multiple non-contiguous subnets
+Severity: Medium — security/policy gap, not a connectivity outage
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. Finance's IP space is fragmented across multiple non-contiguous subnets, a byproduct of a past reorg or relocation, and the new rule was only written against one of them (likelihood: high) — reasoning: a rule working for some but not others within one supposedly logical group is the classic signature of address space that isn't actually contiguous, rather than a rule syntax error
+2. The firewall rule itself has a typo or incorrect range that happens to only cover part of the intended space (likelihood: medium) — reasoning: a simpler explanation that should be checked first since it's quick to verify
+3. Some Finance users are actually on a different VLAN or subnet temporarily, e.g. a guest or overflow network, due to a recent office move (likelihood: low) — reasoning: possible, but no office move was mentioned in the report
+4. The rule applied correctly but a caching or propagation delay is affecting some devices (likelihood: low) — reasoning: would typically resolve itself quickly rather than persisting as a reported issue
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Pull the actual deployed firewall rule and check the IP ranges it references against IPAM's current Finance subnet records — rules in/out: hypothesis 2
+Step 2: Check IPAM for all subnets tagged or associated with Finance, to see whether the department spans more than one non-contiguous range — rules in/out: hypothesis 1
+Step 3: Check the affected users' actual assigned subnet/VLAN against their expected Finance assignment — rules in/out: hypothesis 3
+Step 4: Confirm rule propagation status across all relevant firewall/network devices — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Checked the deployed rule and it matches exactly what was written in the change request, no typo, it references one specific /24. Looked up Finance in IPAM and it turns out Finance actually has two subnets — the main /24 the rule was written against, plus a smaller /26 that got carved out a couple years back during an office reshuffle, nobody updated the documentation to reflect that Finance spans both. Checked a few of the affected users and they're all sitting in that second /26, not the main /24. Confirmed rule propagation across all the firewalls and it's fully propagated everywhere, so it's not a delay issue, the rule just genuinely doesn't cover that second range."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (Finance's address space is fragmented across two non-contiguous subnets, and the rule only targeted one)
+Hypothesis 2 ruled out: rule matches the change request exactly, no configuration error
+Hypothesis 3 ruled out: affected users are on the documented-as-undocumented secondary subnet, not a temporary or guest assignment
+Hypothesis 4 ruled out: propagation confirmed complete across all devices
+Convergence decision: Resolved, no further loop needed
+Confidence: 91%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: Finance's IP address space is fragmented across two non-contiguous subnets — a primary /24 and a smaller /26 carved out during a past office reorganization — with no documentation update at the time to reflect that the /26 was also Finance. The new firewall rule was correctly written against the documented Finance range but only covered the /24, leaving users on the undocumented /26 unaffected by the intended policy.
+
+EVIDENCE TRAIL:
+- Deployed firewall rule: matches the change request exactly, no configuration error
+- IPAM records: Finance spans two non-contiguous ranges (/24 and /26), the second undocumented as Finance
+- Affected user subnet assignment: confirmed on the undocumented /26
+- Rule propagation: confirmed complete across all devices, not a delay issue
+
+REMEDIATION STEPS:
+1. Immediate: extend the firewall rule to also cover the /26 range, closing the policy gap
+2. Immediate: update IPAM documentation to correctly tag the /26 as part of Finance's address space
+3. Medium-term: audit other departments for similar undocumented fragmented subnets left over from past reorgs or office moves
+4. Long-term: require an IPAM documentation update whenever a department's address space is split or relocated, so policy authors have an accurate picture going forward
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

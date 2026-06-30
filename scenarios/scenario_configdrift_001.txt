@@ -1,0 +1,76 @@
+SCENARIO: CONFIGDRIFT-001
+INCIDENT TYPE: Configuration Drift
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Secondary DNS server in the Lyon office is returning different results than the primary for a couple of internal records — helpdesk noticed because an internal redirect wasn't working from that office specifically, worked fine from HQ. No ticket on file for any planned change there. Been maybe a week, hard to say exactly since it was subtle."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: Configuration drift
+Confidence: 85%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: Configuration drift
+Scope assessment: Lyon secondary DNS server, divergence from primary affecting internal zone resolution for that location
+Severity: Medium — localized, not externally visible, but indicates an unmanaged change
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. An undocumented manual change was made directly on the Lyon secondary, causing it to diverge from the primary (likelihood: high) — reasoning: divergence isolated to one server with no corresponding change ticket points to an out-of-process edit rather than a sync failure
+2. Zone transfer (replication) between primary and secondary failed or is stale (likelihood: medium) — reasoning: would also produce divergence, but would typically affect the whole zone rather than specific records
+3. A server-level configuration difference (e.g. forwarders or ACLs) is causing the secondary to resolve some queries differently, rather than the zone data itself differing (likelihood: medium) — reasoning: plausible alternate explanation that wouldn't show up as a zone-data diff
+4. Two different, conflicting change requests were applied to primary and secondary independently (likelihood: low) — reasoning: would require two separate undocumented changes, less likely than one
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Pull and compare the change logs for both primary and secondary, checking for Who-What-When completeness on any recent entries — rules in/out: hypothesis 1
+Step 2: Check zone transfer/replication status and the last successful sync timestamp between primary and secondary — rules in/out: hypothesis 2
+Step 3: Run a full cross-server configuration comparison covering both zone data and server-level options (forwarders, ACLs) — rules in/out: hypotheses 1 and 3 together
+Step 4: Check whether any change tickets exist for either server in the relevant time window, even informal ones — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Change log on the secondary has a gap — there's an entry from about 6 days ago but it's missing who made it and why, just a timestamp and 'updated record' as the description, which doesn't meet the standard we're supposed to log at. Primary's log looks complete and normal for the same window. Checked replication status and the last successful zone transfer was actually just yesterday and completed fine, so it's not a sync failure. Ran the full config comparison across both servers and the zone data matches except for the one record someone edited directly on the secondary — forwarders and ACLs are identical between the two. No change tickets found anywhere for either server in that window."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (undocumented manual edit on the secondary)
+Hypothesis 2 ruled out: replication completed successfully and recently, not a sync issue
+Hypothesis 3 ruled out: server-level configuration (forwarders, ACLs) identical between primary and secondary, divergence isolated to zone data
+Hypothesis 4 ruled out: no change tickets found for either server, inconsistent with two independent conflicting changes
+Convergence decision: Resolved, no further loop needed
+Confidence: 92%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: An undocumented manual edit was made directly on the Lyon secondary DNS server, altering specific internal zone records outside of change management. The incomplete change log entry (missing who and why) and the absence of any corresponding ticket confirm this was an out-of-process change rather than a replication failure or server-level misconfiguration.
+
+EVIDENCE TRAIL:
+- Secondary change log: incomplete entry approximately 6 days prior, missing who/why fields, fails the Who-What-When standard
+- Primary change log: complete, no anomalies
+- Replication status: last successful zone transfer completed the prior day, ruling out a sync failure
+- Cross-server configuration comparison: zone data diverges only on the affected record; forwarders and ACLs identical
+- Change tickets: none found for either server in the relevant window
+
+REMEDIATION STEPS:
+1. Immediate: revert or reconcile the affected record on the secondary to match the intended configuration, pending confirmation of the correct value
+2. Immediate: identify who made the manual edit and document the original intent, even retroactively
+3. Medium-term: restrict direct manual edits on secondary servers, routing changes through the primary and replication instead
+4. Long-term: enforce the Who-What-When logging standard at the system level so this kind of gap can't recur silently
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================

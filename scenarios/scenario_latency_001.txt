@@ -1,0 +1,75 @@
+SCENARIO: LATENCY-001
+INCIDENT TYPE: DNS Resolution Latency
+DIFFICULTY: Baseline (single-pass diagnosable, minimal red herrings)
+
+=====================================
+SYMPTOM DESCRIPTION (as the engineer would log it)
+=====================================
+"Users across the office saying everything feels slow to load since right after lunch — web pages, internal apps, even Slack. Not a full outage, things do eventually load, just noticeably slower, a few seconds sometimes. Helpdesk getting a steady trickle of complaints rather than a flood. No alerts from the firewall or VPN."
+
+=====================================
+CLASSIFIER OUTPUT (simulated)
+=====================================
+Incident type: DNS resolution latency
+Confidence: 83%
+
+=====================================
+STAGE 1 — TRIAGE OUTPUT
+=====================================
+Classification confirmed: DNS resolution latency
+Scope assessment: Appears to affect general internal resolver usage across the office network, not isolated to one application or subnet
+Severity: Medium — degraded but not blocking
+
+=====================================
+STAGE 2 — HYPOTHESIS OUTPUT (ranked)
+=====================================
+1. Internal DNS resolver under resource load (CPU/memory), slowing response times (likelihood: high) — reasoning: general slowness across multiple unrelated services points to a shared dependency like the resolver rather than any one service
+2. Upstream/forwarder responding slowly, with the internal resolver passing along the delay (likelihood: medium) — reasoning: would produce similar symptoms but originates outside internal infrastructure
+3. Low cache hit rate forcing repeated full recursive lookups (likelihood: medium) — reasoning: would compound either of the above into longer per-query latency
+4. General network congestion unrelated to DNS specifically (likelihood: low) — reasoning: possible, but the broad and fairly sudden onset described is more consistent with a DNS-layer cause than generic congestion
+
+=====================================
+STAGE 3 — INVESTIGATION PLAN
+=====================================
+Step 1: Check internal DNS resolver resource utilization (CPU, memory, query queue length) — rules in/out: hypothesis 1
+Step 2: Check the resolver's average response time when querying upstream forwarders directly — rules in/out: hypothesis 2
+Step 3: Check resolver cache hit/miss ratio for the affected period — rules in/out: hypothesis 3
+Step 4: Check general network utilization and latency metrics unrelated to DNS (e.g. switch/router load) — rules in/out: hypothesis 4
+
+=====================================
+STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
+=====================================
+"Checked the resolver and CPU is sitting around 90%, way above the usual 20-30% baseline, memory looks fine though. Tested a few lookups straight to the upstream forwarders and those came back quick, under 50ms, so that part looks normal. Cache hit ratio dropped a good bit compared to yesterday, more queries going to full lookups than usual. Network team checked switches and routers for that floor, nothing unusual, normal utilization."
+
+=====================================
+STAGE 5 — SYNTHESIS OUTPUT
+=====================================
+Updated ranking: Hypothesis 1 confirmed (resolver under elevated resource load)
+Hypothesis 3 confirmed as a contributing factor: lower cache hit ratio is compounding the load rather than acting as an independent cause
+Hypothesis 2 ruled out: upstream forwarder response times normal
+Hypothesis 4 ruled out: no broader network congestion detected
+Convergence decision: Resolved, no further loop needed
+Confidence: 90%
+
+=====================================
+STAGE 6 — REPORT OUTPUT
+=====================================
+CAUSE: The internal DNS resolver serving the office network is under elevated resource load (CPU ~90% against a 20-30% baseline), increasing per-query response time across all DNS-dependent services. A reduced cache hit ratio during the same window is compounding the effect by forcing more queries through full lookups instead of being served from cache.
+
+EVIDENCE TRAIL:
+- Resolver CPU utilization: ~90%, well above normal baseline
+- Upstream/forwarder response time: normal, under 50ms
+- Cache hit ratio: reduced relative to the prior day
+- Network/switch utilization: normal, no congestion detected
+
+REMEDIATION STEPS:
+1. Immediate: identify and address the source of resolver CPU load (e.g. a runaway process, an unusually high query volume from one source, or a misbehaving client retry loop)
+2. Immediate: if available, temporarily shift a portion of query load to a secondary resolver to relieve pressure
+3. Medium-term: review resolver capacity sizing against current query volume, since a 90% load level suggests insufficient headroom
+4. Long-term: add resolver resource utilization alerting at a defined threshold to catch load buildup before it becomes user-facing latency
+
+HUMAN SIGN-OFF: [ ] Reviewed and approved by: ___________  Date: ___________
+
+=====================================
+END SCENARIO
+=====================================
