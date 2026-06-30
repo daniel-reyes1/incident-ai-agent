@@ -45,7 +45,7 @@ STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
 STAGE 5 — SYNTHESIS OUTPUT
 =====================================
 Updated ranking: Hypothesis 1 confirmed (resolver under elevated resource load)
-Hypothesis 3 confirmed as a contributing factor: lower cache hit ratio is compounding the load rather than acting as an independent cause
+Hypothesis 3 ruled out as an independent cause: the cache hit ratio dip is a downstream effect of the resolver struggling under load, not a separate driver
 Hypothesis 2 ruled out: upstream forwarder response times normal
 Hypothesis 4 ruled out: no broader network congestion detected
 Convergence decision: Resolved, no further loop needed
@@ -54,7 +54,7 @@ Confidence: 90%
 =====================================
 STAGE 6 — REPORT OUTPUT
 =====================================
-CAUSE: The internal DNS resolver serving the office network is under elevated resource load (CPU ~90% against a 20-30% baseline), increasing per-query response time across all DNS-dependent services. A reduced cache hit ratio during the same window is compounding the effect by forcing more queries through full lookups instead of being served from cache.
+CAUSE: The internal DNS resolver serving the office network is under elevated resource load (CPU ~90% against a 20-30% baseline), increasing per-query response time across all DNS-dependent services. The reduced cache hit ratio observed during the same window is a downstream effect of the resolver struggling to keep up under that load, not a separate contributing cause.
 
 EVIDENCE TRAIL:
 - Resolver CPU utilization: ~90%, well above normal baseline

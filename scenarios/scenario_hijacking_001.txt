@@ -44,8 +44,8 @@ STAGE 4 — HUMAN INPUT (engineer findings, as typed into the system)
 =====================================
 STAGE 5 — SYNTHESIS OUTPUT
 =====================================
-Updated ranking: Hypothesis 1 confirmed (cache poisoning attempt succeeded, served a forged answer)
-Hypothesis 3 confirmed as a contributing factor rather than a separate cause: the lapsed DNSSEC signature created the exposure window that allowed the poisoning to succeed, alongside disabled source port randomization as the second exploited gap
+Updated ranking: Hypothesis 1 confirmed (cache poisoning attempt succeeded, exploiting disabled source port randomization and a lapsed DNSSEC signature to serve a forged answer)
+Hypothesis 3 ruled out as an independent cause: the DNSSEC lapse is part of the confirmed mechanism under hypothesis 1, not a separate contributing factor
 Hypothesis 2 ruled out: the served IP was external and never associated with the real server, not a stale legitimate address
 Hypothesis 4 ruled out: both affected machines clean on hosts file and malware scan
 Convergence decision: Resolved, no further loop needed
