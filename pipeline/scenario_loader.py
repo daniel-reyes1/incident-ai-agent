@@ -259,7 +259,7 @@ def load_scenario(identifier: str) -> ScenarioData:
         ValueError: if the file is missing required header fields.
     """
     path = _find_scenario_file(identifier)
-    content = path.read_text(encoding="utf-8")
+    content = path.read_text(encoding="utf-8-sig")
 
     # Parse the metadata block (before the first separator)
     parts = content.split(SEPARATOR)
